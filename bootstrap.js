@@ -1,19 +1,15 @@
-/* global Zotero */
+/* global Zotero, Services */
 
-var Services;
-try {
-  ({ Services } = ChromeUtils.importESModule("resource://gre/modules/Services.sys.mjs"));
-} catch (e) {
-  ({ Services } = ChromeUtils.import("resource://gre/modules/Services.jsm"));
-}
+var chromeHandle;
 
-const DeepSeekAssistant = {
+var DeepSeekAssistant = {
   id: "ai4zotero@trivial0930.github.io",
   appName: "AI4Zotero",
   paneID: "ai4zotero",
   registeredPaneID: "",
   rootURI: "",
   windows: new Map(),
+  readerWindows: new Map(),
   readerHandlers: [],
   prefs: {
     apiKey: "extensions.ai4zotero.apiKey",
@@ -32,21 +28,73 @@ const DeepSeekAssistant = {
     maxContextChars: 14000
   },
 
-  startup(data) {
+  async startup(data) {
     this.id = data.id || this.id;
-    this.rootURI = data.rootURI || "";
+    await Zotero.initializationPromise;
+    this.rootURI = data.rootURI || data.resourceURI?.spec || "";
+    Zotero.debug("AI4Zotero: startup");
+    this.registerChrome();
     this.ensureDefaultPrefs();
     this.registerItemPaneSection();
     this.registerReaderHooks();
+    this.loadExistingWindows();
   },
 
   shutdown() {
+    Zotero.debug("AI4Zotero: shutdown");
     this.unregisterReaderHooks();
     this.unregisterItemPaneSection();
     for (let win of this.windows.keys()) {
       this.unloadWindow(win);
     }
+    for (let win of this.readerWindows.keys()) {
+      this.unloadStandaloneReaderWindow(win);
+    }
     this.windows.clear();
+    this.readerWindows.clear();
+    if (chromeHandle) {
+      chromeHandle.destruct();
+      chromeHandle = null;
+    }
+  },
+
+  registerChrome() {
+    if (chromeHandle || !this.rootURI) {
+      return;
+    }
+    let aomStartup = Components.classes["@mozilla.org/addons/addon-manager-startup;1"]
+      .getService(Components.interfaces.amIAddonManagerStartup);
+    let manifestURI = Services.io.newURI(this.rootURI + "manifest.json");
+    chromeHandle = aomStartup.registerChrome(manifestURI, [
+      ["content", "ai4zotero", this.rootURI + "chrome/content/"]
+    ]);
+    Zotero.debug("AI4Zotero: chrome registered");
+  },
+
+  loadExistingWindows() {
+    try {
+      let enumerator = Services.wm.getEnumerator("navigator:browser");
+      while (enumerator.hasMoreElements()) {
+        let win = enumerator.getNext();
+        if (win?.document?.readyState === "complete") {
+          this.loadWindow(win);
+        } else if (win?.addEventListener) {
+          win.addEventListener("load", () => this.loadWindow(win), { once: true });
+        }
+      }
+      let readerEnumerator = Services.wm.getEnumerator("zotero:reader");
+      while (readerEnumerator.hasMoreElements()) {
+        let win = readerEnumerator.getNext();
+        if (win?.document?.readyState === "complete") {
+          this.loadStandaloneReaderWindow(win);
+        } else if (win?.addEventListener) {
+          win.addEventListener("load", () => this.loadStandaloneReaderWindow(win), { once: true });
+        }
+      }
+      Zotero.debug(`AI4Zotero: loaded existing windows (${this.windows.size})`);
+    } catch (e) {
+      Zotero.debug(`AI4Zotero: failed loading existing windows: ${e}`);
+    }
   },
 
   ensureDefaultPrefs() {
@@ -81,6 +129,7 @@ const DeepSeekAssistant = {
 
     let stylesheet = this.injectStylesheet(win);
     this.injectLocalization(win);
+    Zotero.debug("AI4Zotero: main window loaded");
 
     let doc = win.document;
     let button = doc.createXULElement("toolbarbutton");
@@ -99,6 +148,7 @@ const DeepSeekAssistant = {
 
     let state = { button, menuitem, stylesheet };
     this.windows.set(win, state);
+    this.refreshItemPaneSections(win);
   },
 
   unloadWindow(win) {
@@ -111,6 +161,53 @@ const DeepSeekAssistant = {
     state.stylesheet?.remove();
     win.document.querySelector('[href="ai4zotero.ftl"]')?.remove();
     this.windows.delete(win);
+  },
+
+  loadStandaloneReaderWindow(win) {
+    if (this.readerWindows.has(win) || !win?.document) {
+      return;
+    }
+
+    let stylesheet = this.injectStylesheet(win);
+    let doc = win.document;
+    let host = doc.getElementById("zotero-reader")?.parentElement;
+    if (!host) {
+      Zotero.debug("AI4Zotero: standalone reader host unavailable");
+      return;
+    }
+
+    let rail = doc.createXULElement("vbox");
+    rail.id = "ai4zotero-reader-rail";
+    rail.setAttribute("pack", "start");
+    let button = doc.createXULElement("toolbarbutton");
+    button.id = "ai4zotero-reader-rail-button";
+    button.setAttribute("label", "AI");
+    button.setAttribute("tooltiptext", "AI4Zotero");
+    button.addEventListener("command", () => this.showPanel(win, { focus: "question" }));
+    rail.append(button);
+
+    let box = doc.createXULElement("vbox");
+    box.id = "ai4zotero-reader-panel-box";
+    box.setAttribute("hidden", "true");
+    let panel = this.createPanel(win, { standaloneReader: true });
+    panel.hidden = false;
+    box.append(panel);
+    host.append(rail, box);
+
+    this.readerWindows.set(win, { stylesheet, rail, box, panel });
+    win.addEventListener("unload", () => this.unloadStandaloneReaderWindow(win), { once: true });
+    Zotero.debug("AI4Zotero: standalone reader window loaded");
+  },
+
+  unloadStandaloneReaderWindow(win) {
+    let state = this.readerWindows.get(win);
+    if (!state) {
+      return;
+    }
+    state.rail?.remove();
+    state.box?.remove();
+    state.stylesheet?.remove();
+    this.readerWindows.delete(win);
   },
 
   injectStylesheet(win) {
@@ -153,13 +250,27 @@ const DeepSeekAssistant = {
     return item;
   },
 
+  refreshItemPaneSections(win) {
+    try {
+      for (let itemDetails of win.document.querySelectorAll("item-details")) {
+        itemDetails.renderCustomSections?.();
+        itemDetails.forceUpdateSideNav?.();
+      }
+      win.ZoteroContextPane?.update?.();
+      Zotero.debug("AI4Zotero: refreshed item pane sections");
+    } catch (e) {
+      Zotero.debug(`AI4Zotero: failed refreshing item pane sections: ${e}`);
+    }
+  },
+
   registerItemPaneSection() {
     if (!Zotero.ItemPaneManager?.registerSection || this.registeredPaneID) {
+      Zotero.debug(`AI4Zotero: ItemPaneManager unavailable or already registered (${this.registeredPaneID})`);
       return;
     }
 
-    let icon16 = this.getIconDataURI(16);
-    let icon20 = this.getIconDataURI(20);
+    let icon16 = "chrome://ai4zotero/content/icons/section-16.svg";
+    let icon20 = "chrome://ai4zotero/content/icons/section-20.svg";
     this.registeredPaneID = Zotero.ItemPaneManager.registerSection({
       paneID: this.paneID,
       pluginID: this.id,
@@ -178,6 +289,7 @@ const DeepSeekAssistant = {
         setSectionSummary(this.getCharPref(this.prefs.apiKey, "") ? "Ready" : "API key required");
       },
       onRender: ({ doc, body }) => {
+        Zotero.debug("AI4Zotero: rendering item pane section");
         body.replaceChildren();
         let win = doc.defaultView;
         let panel = this.createPanel(win, { embedded: true });
@@ -195,6 +307,34 @@ const DeepSeekAssistant = {
         }
       }
     }) || "";
+    Zotero.debug(`AI4Zotero: registered item pane section ${this.registeredPaneID}`);
+    this.ensureItemPaneVisibilityPrefs();
+  },
+
+  ensureItemPaneVisibilityPrefs() {
+    if (!this.registeredPaneID) {
+      return;
+    }
+    try {
+      Services.prefs.setBoolPref(`extensions.zotero.panes.${this.registeredPaneID}.open`, true);
+      let order = Zotero.Prefs.get("sidenav.order") || "";
+      let panes = order ? order.split(",").filter(Boolean) : [
+        "info",
+        "abstract",
+        "attachments",
+        "notes",
+        "libraries-collections",
+        "tags",
+        "related"
+      ];
+      if (!panes.includes(this.registeredPaneID)) {
+        panes.push(this.registeredPaneID);
+        Zotero.Prefs.set("sidenav.order", panes.join(","));
+      }
+      Zotero.debug("AI4Zotero: ensured item pane visibility prefs");
+    } catch (e) {
+      Zotero.debug(`AI4Zotero: failed setting item pane visibility prefs: ${e}`);
+    }
   },
 
   unregisterItemPaneSection() {
@@ -205,20 +345,8 @@ const DeepSeekAssistant = {
     this.registeredPaneID = "";
   },
 
-  getIconDataURI(size) {
-    let stroke = "#2271b1";
-    let svg = [
-      `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 20 20">`,
-      `<rect x="2.5" y="2.5" width="15" height="15" rx="4" fill="none" stroke="${stroke}" stroke-width="1.8"/>`,
-      `<path d="M6 14l1.2-3.2h5.6L14 14M8 8.8h4" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
-      `<path d="M9.9 4.9l.1-.4.1.4.4.1-.4.1-.1.4-.1-.4-.4-.1.4-.1z" fill="${stroke}"/>`,
-      `</svg>`
-    ].join("");
-    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
-  },
-
   createPanel(win, options = {}) {
-    let { embedded = false } = options;
+    let { embedded = false, standaloneReader = false } = options;
     let doc = win.document;
     let html = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
     html.id = "ai4zotero-panel";
@@ -226,51 +354,78 @@ const DeepSeekAssistant = {
     if (embedded) {
       html.classList.add("ai4zotero-embedded");
     }
-    html.innerHTML = `
-      <div class="zda-header">
-        <div>
-          <div class="zda-title">AI4Zotero</div>
-          <div class="zda-subtitle" data-role="source">Open a PDF or select an attachment</div>
-        </div>
-        <button type="button" class="zda-icon-button" data-action="close" title="Close">×</button>
-      </div>
-      <div class="zda-status" data-role="config-status"></div>
-      <details class="zda-settings" data-role="settings" open>
-        <summary>DeepSeek API Settings</summary>
-        <label>API Key
-          <input type="password" data-field="apiKey" placeholder="sk-..." autocomplete="off" />
-        </label>
-        <label>Endpoint
-          <input type="url" data-field="endpoint" />
-        </label>
-        <label>Model
-          <input type="text" data-field="model" />
-        </label>
-        <div class="zda-settings-actions">
-          <button type="button" data-action="save-settings">Save</button>
-          <button type="button" data-action="test-api">Test</button>
-        </div>
-      </details>
-      <div class="zda-quick-actions">
-        <button type="button" data-prompt="summarize">Summarize</button>
-        <button type="button" data-prompt="selection">Explain Selection</button>
-        <button type="button" data-prompt="methods">Methods</button>
-        <button type="button" data-prompt="limitations">Limitations</button>
-      </div>
-      <div class="zda-context">
-        <div class="zda-section-title">Context</div>
-        <textarea data-field="context" spellcheck="false"></textarea>
-        <div class="zda-context-actions">
-          <button type="button" data-action="refresh-context">Refresh</button>
-          <button type="button" data-action="clear-context">Clear</button>
-        </div>
-      </div>
-      <div class="zda-chat" data-role="chat"></div>
-      <form class="zda-composer" data-role="composer">
-        <textarea data-field="question" placeholder="Ask about this paper..." rows="4"></textarea>
-        <button type="submit" data-action="ask">Ask</button>
-      </form>
-    `;
+    if (standaloneReader) {
+      html.classList.add("ai4zotero-standalone-reader");
+    }
+    let h = (tag, attrs = {}, children = []) => {
+      let elem = doc.createElementNS("http://www.w3.org/1999/xhtml", tag);
+      for (let [key, value] of Object.entries(attrs)) {
+        if (key === "className") {
+          elem.className = value;
+        } else if (key === "text") {
+          elem.textContent = value;
+        } else if (key === "open" && value) {
+          elem.setAttribute("open", "");
+        } else if (value !== false && value !== null && typeof value !== "undefined") {
+          elem.setAttribute(key, String(value));
+        }
+      }
+      for (let child of children) {
+        elem.append(child);
+      }
+      return elem;
+    };
+    let button = (text, attrs = {}) => h("button", { type: "button", text, ...attrs });
+    let input = (field, attrs = {}) => h("input", { "data-field": field, ...attrs });
+    let label = (text, control) => h("label", {}, [doc.createTextNode(text), control]);
+
+    html.append(
+      h("div", { className: "zda-header" }, [
+        h("div", {}, [
+          h("div", { className: "zda-title", text: "AI4Zotero" }),
+          h("div", {
+            className: "zda-subtitle",
+            "data-role": "source",
+            text: "Open a PDF or select an attachment"
+          })
+        ]),
+        button("×", { className: "zda-icon-button", "data-action": "close", title: "Close" })
+      ]),
+      h("div", { className: "zda-status", "data-role": "config-status" }),
+      h("details", { className: "zda-settings", "data-role": "settings", open: true }, [
+        h("summary", { text: "DeepSeek API Settings" }),
+        label("API Key", input("apiKey", { type: "password", placeholder: "sk-...", autocomplete: "off" })),
+        label("Endpoint", input("endpoint", { type: "url" })),
+        label("Model", input("model", { type: "text" })),
+        h("div", { className: "zda-settings-actions" }, [
+          button("Save", { "data-action": "save-settings" }),
+          button("Test", { "data-action": "test-api" })
+        ])
+      ]),
+      h("div", { className: "zda-quick-actions" }, [
+        button("Summarize", { "data-prompt": "summarize" }),
+        button("Explain Selection", { "data-prompt": "selection" }),
+        button("Methods", { "data-prompt": "methods" }),
+        button("Limitations", { "data-prompt": "limitations" })
+      ]),
+      h("div", { className: "zda-context" }, [
+        h("div", { className: "zda-section-title", text: "Context" }),
+        h("textarea", { "data-field": "context", spellcheck: "false" }),
+        h("div", { className: "zda-context-actions" }, [
+          button("Refresh", { "data-action": "refresh-context" }),
+          button("Clear", { "data-action": "clear-context" })
+        ])
+      ]),
+      h("div", { className: "zda-chat", "data-role": "chat" }),
+      h("form", { className: "zda-composer", "data-role": "composer" }, [
+        h("textarea", {
+          "data-field": "question",
+          placeholder: "Ask about this paper...",
+          rows: "4"
+        }),
+        button("Ask", { type: "submit", "data-action": "ask" })
+      ])
+    );
 
     html.querySelector('[data-action="close"]').addEventListener("click", () => {
       if (embedded) {
@@ -278,6 +433,8 @@ const DeepSeekAssistant = {
         if (section) {
           section.open = false;
         }
+      } else if (standaloneReader) {
+        html.closest("#ai4zotero-reader-panel-box")?.setAttribute("hidden", "true");
       } else {
         this.hidePanel(win);
       }
@@ -333,6 +490,9 @@ const DeepSeekAssistant = {
   async showPanel(win, seed = {}) {
     let panel = await this.openItemPaneSection(win);
     if (!panel) {
+      panel = await this.openStandaloneReaderPanel(win);
+    }
+    if (!panel) {
       throw new Error("AI4Zotero section is not available for the current Zotero view.");
     }
     panel.hidden = false;
@@ -355,50 +515,77 @@ const DeepSeekAssistant = {
   async openItemPaneSection(win) {
     let doc = win.document;
     let paneID = this.registeredPaneID || this.paneID;
-    let container = null;
+    let itemDetails = null;
 
     try {
       if (win.Zotero_Tabs?.selectedType === "library") {
         let itemPane = doc.getElementById("zotero-item-pane");
         if (itemPane) {
           itemPane.collapsed = false;
-          itemPane.render?.();
+          await itemPane.render?.();
         }
-        container = doc.getElementById("zotero-view-item-sidenav")?.container;
+        itemDetails = doc.getElementById("zotero-item-details");
       } else {
         if (win.ZoteroContextPane) {
           win.ZoteroContextPane.collapsed = false;
           win.ZoteroContextPane.context.mode = "item";
           win.ZoteroContextPane.update();
         }
-        container = doc.getElementById("zotero-context-pane-sidenav")?.container;
+        itemDetails = this.getContextItemDetails(win);
       }
 
-      if (!container) {
+      for (let i = 0; !itemDetails && i < 10; i++) {
         await Zotero.Promise.delay(100);
-        container = doc.getElementById("zotero-context-pane-sidenav")?.container
-          || doc.getElementById("zotero-view-item-sidenav")?.container;
+        itemDetails = win.Zotero_Tabs?.selectedType === "library"
+          ? doc.getElementById("zotero-item-details")
+          : this.getContextItemDetails(win);
       }
 
-      if (!container) {
+      if (!itemDetails) {
         return null;
       }
 
-      await container.render?.();
+      itemDetails.renderCustomSections?.();
+      await itemDetails.render?.();
       await Zotero.Promise.delay(50);
-      let pane = container.getPane?.(paneID);
+      itemDetails.sidenav?.render?.();
+      itemDetails.sidenav?.addPane?.(paneID);
+      itemDetails.sidenav?.updatePaneStatus?.(paneID);
+      let pane = itemDetails.getPane?.(paneID);
       if (pane) {
         pane.open = true;
         pane.hidden = false;
+        itemDetails.pinnedPane = paneID;
+        await pane._forceRenderAll?.();
       }
-      container.sidenav?.addPane?.(paneID);
-      container.sidenav?.updatePaneStatus?.(paneID);
-      await container.scrollToPane?.(paneID, "smooth");
+      await itemDetails.scrollToPane?.(paneID, "smooth");
       return this.getPanel(win);
     } catch (e) {
       Zotero.debug(`AI4Zotero: failed to open item pane section: ${e}`);
       return this.getPanel(win);
     }
+  },
+
+  getContextItemDetails(win) {
+    let tabID = win.Zotero_Tabs?.selectedID;
+    let details = Array.from(win.document.querySelectorAll("#zotero-context-pane-inner item-details"));
+    return details.find(elem => elem.tabID === tabID)
+      || win.document.getElementById("zotero-context-pane-sidenav")?.container
+      || null;
+  },
+
+  async openStandaloneReaderPanel(win) {
+    if (win?.document?.documentElement?.getAttribute("windowtype") !== "zotero:reader") {
+      return null;
+    }
+    this.loadStandaloneReaderWindow(win);
+    let state = this.readerWindows.get(win);
+    if (!state) {
+      return null;
+    }
+    state.box.removeAttribute("hidden");
+    await this.refreshContextPreview(win);
+    return state.panel;
   },
 
   hidePanel(win) {
@@ -410,7 +597,9 @@ const DeepSeekAssistant = {
   },
 
   getPanel(win) {
-    return this.windows.get(win)?.panel || win.document.getElementById("ai4zotero-panel");
+    return this.readerWindows.get(win)?.panel
+      || this.windows.get(win)?.panel
+      || win.document.getElementById("ai4zotero-panel");
   },
 
   saveSettings(win, announce = false) {
@@ -516,6 +705,9 @@ const DeepSeekAssistant = {
 
   getActiveReader(win) {
     try {
+      if (win.reader) {
+        return win.reader;
+      }
       let tabID = win.Zotero_Tabs?.selectedID;
       return tabID ? Zotero.Reader.getByTabID(tabID) : null;
     } catch (e) {
@@ -705,6 +897,9 @@ const DeepSeekAssistant = {
 
     let toolbarHandler = event => {
       let { reader, doc, append } = event;
+      if (reader?._window?.document?.documentElement?.getAttribute("windowtype") === "zotero:reader") {
+        this.loadStandaloneReaderWindow(reader._window);
+      }
       let button = doc.createElement("button");
       button.className = "ai4zotero-reader-toolbar-button";
       button.type = "button";

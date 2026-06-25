@@ -31,6 +31,34 @@
   max-width: 240px;
 }
 
+#ai4zotero-reader-rail {
+  width: 34px;
+  padding-top: 8px;
+  border-inline-start: 1px solid var(--color-border, rgba(0, 0, 0, .14));
+  background: var(--material-toolbar, #f9f9f9);
+}
+
+#ai4zotero-reader-rail-button {
+  min-width: 28px;
+  min-height: 28px;
+  margin: 0 3px;
+  border-radius: 6px;
+  color: #4072e5;
+  font-weight: 700;
+}
+
+#ai4zotero-reader-panel-box {
+  width: 360px;
+  min-width: 320px;
+  max-width: 460px;
+  border-inline-start: 1px solid var(--color-border, rgba(0, 0, 0, .14));
+  background: var(--material-background, #f7f7f8);
+}
+
+#ai4zotero-panel.ai4zotero-standalone-reader {
+  min-width: 0;
+}
+
 .zda-header,
 .zda-context-actions,
 .zda-composer {
