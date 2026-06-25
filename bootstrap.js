@@ -271,6 +271,7 @@ var DeepSeekAssistant = {
 
     let icon16 = "chrome://ai4zotero/content/icons/section-16.svg";
     let icon20 = "chrome://ai4zotero/content/icons/section-20.svg";
+    let settingsIcon = "chrome://ai4zotero/content/icons/settings-16.svg";
     this.registeredPaneID = Zotero.ItemPaneManager.registerSection({
       paneID: this.paneID,
       pluginID: this.id,
@@ -283,6 +284,17 @@ var DeepSeekAssistant = {
         icon: icon20,
         orderable: true
       },
+      sectionButtons: [
+        {
+          type: "settings",
+          icon: settingsIcon,
+          l10nID: "ai4zotero-section-settings",
+          onClick: ({ doc }) => {
+            this.showPanel(doc.defaultView, { focus: "settings" })
+              .catch(e => this.reportError(doc.defaultView, e));
+          }
+        }
+      ],
       onItemChange: ({ item, setEnabled, setSectionSummary }) => {
         let enabled = !!item && typeof item.isNote === "function" && !item.isNote();
         setEnabled(enabled);
@@ -295,7 +307,7 @@ var DeepSeekAssistant = {
         let panel = this.createPanel(win, { embedded: true });
         panel.hidden = false;
         body.append(panel);
-        this.refreshContextPreview(win).catch(e => this.reportError(win, e));
+        this.refreshContextPreview(win, "", panel).catch(e => this.reportError(win, e, panel));
       },
       onToggle: ({ doc, body }) => {
         let win = doc.defaultView;
@@ -303,7 +315,7 @@ var DeepSeekAssistant = {
         if (panel) {
           this.populateSettings(panel);
           this.updateConfigStatus(panel);
-          this.refreshContextPreview(win).catch(e => this.reportError(win, e));
+          this.refreshContextPreview(win, "", panel).catch(e => this.reportError(win, e, panel));
         }
       }
     }) || "";
@@ -350,6 +362,7 @@ var DeepSeekAssistant = {
     let doc = win.document;
     let html = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
     html.id = "ai4zotero-panel";
+    html.classList.add("ai4zotero-panel");
     html.setAttribute("hidden", "true");
     if (embedded) {
       html.classList.add("ai4zotero-embedded");
@@ -375,25 +388,35 @@ var DeepSeekAssistant = {
       }
       return elem;
     };
+    let append = (parent, children = []) => {
+      for (let child of children) {
+        parent.appendChild(child);
+      }
+      return parent;
+    };
     let button = (text, attrs = {}) => h("button", { type: "button", text, ...attrs });
     let input = (field, attrs = {}) => h("input", { "data-field": field, ...attrs });
     let label = (text, control) => h("label", {}, [doc.createTextNode(text), control]);
 
-    html.append(
-      h("div", { className: "zda-header" }, [
-        h("div", {}, [
+    append(html, [
+      h("div", { className: "zda-topbar" }, [
+        h("div", { className: "zda-title-group" }, [
           h("div", { className: "zda-title", text: "AI4Zotero" }),
           h("div", {
             className: "zda-subtitle",
             "data-role": "source",
-            text: "Open a PDF or select an attachment"
+            text: "No paper context"
           })
         ]),
-        button("×", { className: "zda-icon-button", "data-action": "close", title: "Close" })
+        h("div", { className: "zda-top-actions" }, [
+          button("↻", { className: "zda-icon-button", "data-action": "refresh-context", title: "Refresh context" }),
+          button("⚙", { className: "zda-icon-button", "data-action": "toggle-settings", title: "DeepSeek settings" }),
+          button("×", { className: "zda-icon-button", "data-action": "close", title: "Close" })
+        ])
       ]),
       h("div", { className: "zda-status", "data-role": "config-status" }),
-      h("details", { className: "zda-settings", "data-role": "settings", open: true }, [
-        h("summary", { text: "DeepSeek API Settings" }),
+      h("div", { className: "zda-settings", "data-role": "settings", hidden: true }, [
+        h("div", { className: "zda-section-title", text: "DeepSeek API" }),
         label("API Key", input("apiKey", { type: "password", placeholder: "sk-...", autocomplete: "off" })),
         label("Endpoint", input("endpoint", { type: "url" })),
         label("Model", input("model", { type: "text" })),
@@ -402,30 +425,43 @@ var DeepSeekAssistant = {
           button("Test", { "data-action": "test-api" })
         ])
       ]),
-      h("div", { className: "zda-quick-actions" }, [
-        button("Summarize", { "data-prompt": "summarize" }),
-        button("Explain Selection", { "data-prompt": "selection" }),
-        button("Methods", { "data-prompt": "methods" }),
-        button("Limitations", { "data-prompt": "limitations" })
+      h("div", { className: "zda-prompt-strip" }, [
+        button("Summary", { "data-prompt": "summarize" }),
+        button("Problem", { "data-prompt": "problem" }),
+        button("Method", { "data-prompt": "methods" }),
+        button("Results", { "data-prompt": "results" }),
+        button("Explain", { "data-prompt": "selection" })
       ]),
       h("div", { className: "zda-context" }, [
-        h("div", { className: "zda-section-title", text: "Context" }),
-        h("textarea", { "data-field": "context", spellcheck: "false" }),
-        h("div", { className: "zda-context-actions" }, [
-          button("Refresh", { "data-action": "refresh-context" }),
-          button("Clear", { "data-action": "clear-context" })
-        ])
+        h("div", { className: "zda-context-head" }, [
+          h("span", { className: "zda-section-title", text: "Context" }),
+          h("div", { className: "zda-context-actions" }, [
+            button("Use Paper", { "data-action": "refresh-context" }),
+            button("Clear", { "data-action": "clear-context" })
+          ])
+        ]),
+        h("textarea", {
+          "data-field": "context",
+          placeholder: "Paper, selection, annotations, and indexed full text appear here.",
+          spellcheck: "false"
+        })
       ]),
-      h("div", { className: "zda-chat", "data-role": "chat" }),
+      h("div", { className: "zda-chat", "data-role": "chat" }, [
+        h("div", {
+          className: "zda-empty",
+          "data-role": "empty",
+          text: "Ask anything about this paper, or highlight text and choose Ask AI."
+        })
+      ]),
       h("form", { className: "zda-composer", "data-role": "composer" }, [
         h("textarea", {
           "data-field": "question",
-          placeholder: "Ask about this paper...",
-          rows: "4"
+          placeholder: "Ask or search anything in this paper...",
+          rows: "3"
         }),
-        button("Ask", { type: "submit", "data-action": "ask" })
+        button("Ask", { type: "submit", className: "zda-ask-button", "data-action": "ask" })
       ])
-    );
+    ]);
 
     html.querySelector('[data-action="close"]').addEventListener("click", () => {
       if (embedded) {
@@ -439,6 +475,9 @@ var DeepSeekAssistant = {
         this.hidePanel(win);
       }
     });
+    html.querySelector('[data-action="toggle-settings"]').addEventListener("click", () => {
+      this.toggleSettings(html);
+    });
     html.querySelector('[data-action="save-settings"]').addEventListener("click", () => {
       try {
         this.saveSettings(win, true, html);
@@ -449,12 +488,16 @@ var DeepSeekAssistant = {
     html.querySelector('[data-action="test-api"]').addEventListener("click", () => {
       this.testConnection(win, html).catch(e => this.reportError(win, e, html));
     });
-    html.querySelector('[data-action="refresh-context"]').addEventListener("click", () => {
-      this.refreshContextPreview(win, "", html).catch(e => this.reportError(win, e, html));
-    });
-    html.querySelector('[data-action="clear-context"]').addEventListener("click", () => {
-      html.querySelector('[data-field="context"]').value = "";
-    });
+    for (let refreshButton of html.querySelectorAll('[data-action="refresh-context"]')) {
+      refreshButton.addEventListener("click", () => {
+        this.refreshContextPreview(win, "", html).catch(e => this.reportError(win, e, html));
+      });
+    }
+    for (let clearButton of html.querySelectorAll('[data-action="clear-context"]')) {
+      clearButton.addEventListener("click", () => {
+        html.querySelector('[data-field="context"]').value = "";
+      });
+    }
     html.querySelector('[data-role="composer"]').addEventListener("submit", event => {
       event.preventDefault();
       this.ask(win, html).catch(e => this.reportError(win, e, html));
@@ -467,6 +510,7 @@ var DeepSeekAssistant = {
 
     this.populateSettings(html);
     this.updateConfigStatus(html);
+    this.toggleSettings(html, !this.getCharPref(this.prefs.apiKey, ""));
     return html;
   },
 
@@ -487,6 +531,16 @@ var DeepSeekAssistant = {
       ? `DeepSeek configured. Model: ${model}`
       : "Set your DeepSeek API key here before asking questions.";
     status.classList.toggle("zda-status-ready", hasKey);
+  },
+
+  toggleSettings(panel, forceOpen = undefined) {
+    let settings = panel.querySelector('[data-role="settings"]');
+    if (!settings) {
+      return;
+    }
+    let open = typeof forceOpen === "boolean" ? forceOpen : settings.hidden;
+    settings.hidden = !open;
+    panel.querySelector('[data-action="toggle-settings"]')?.classList.toggle("zda-active", open);
   },
 
   togglePanel(win, seed = {}) {
@@ -511,7 +565,7 @@ var DeepSeekAssistant = {
     }
     await this.refreshContextPreview(win, seed.context, panel);
     if (seed.focus === "settings" || !this.getCharPref(this.prefs.apiKey, "")) {
-      panel.querySelector('[data-role="settings"]').open = true;
+      this.toggleSettings(panel, true);
       panel.querySelector('[data-field="apiKey"]').focus();
     } else {
       panel.querySelector('[data-field="question"]').focus();
@@ -558,14 +612,16 @@ var DeepSeekAssistant = {
       itemDetails.sidenav?.addPane?.(paneID);
       itemDetails.sidenav?.updatePaneStatus?.(paneID);
       let pane = itemDetails.getPane?.(paneID);
+      let panel = null;
       if (pane) {
         pane.open = true;
         pane.hidden = false;
         itemDetails.pinnedPane = paneID;
         await pane._forceRenderAll?.();
+        panel = pane.querySelector("#ai4zotero-panel");
       }
       await itemDetails.scrollToPane?.(paneID, "smooth");
-      return this.getPanel(win);
+      return panel || this.getPanel(win);
     } catch (e) {
       Zotero.debug(`AI4Zotero: failed to open item pane section: ${e}`);
       return this.getPanel(win);
@@ -631,8 +687,10 @@ var DeepSeekAssistant = {
   applyQuickPrompt(win, type, panel = this.getPanel(win)) {
     let prompts = {
       summarize: "Summarize this paper in 6 bullet points, then list the main contribution and key evidence.",
+      problem: "What problem does this paper solve, and why is the problem important?",
       selection: "Explain the selected text in plain language and relate it to the paper's main argument.",
       methods: "Explain the method section: what problem is solved, what components are introduced, and how evaluation is designed.",
+      results: "Extract the main experimental results, compare them with baselines, and explain what they prove.",
       limitations: "Identify the likely limitations, assumptions, and possible follow-up experiments for this paper."
     };
     panel.querySelector('[data-field="question"]').value = prompts[type] || prompts.summarize;
@@ -806,7 +864,7 @@ var DeepSeekAssistant = {
     let apiKey = this.getCharPref(this.prefs.apiKey, "");
     if (!apiKey) {
       this.addMessage(win, "system", "Please set your DeepSeek API key first.", panel);
-      panel.querySelector('[data-role="settings"]').open = true;
+      this.toggleSettings(panel, true);
       panel.querySelector('[data-field="apiKey"]').focus();
       return;
     }
@@ -905,6 +963,7 @@ var DeepSeekAssistant = {
       return null;
     }
     let chat = panel.querySelector('[data-role="chat"]');
+    chat.querySelector('[data-role="empty"]')?.remove();
     let message = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
     message.className = `zda-message zda-${role}`;
     message.textContent = text;
@@ -945,7 +1004,8 @@ var DeepSeekAssistant = {
         "font-weight: 600"
       ].join(";");
       button.addEventListener("click", () => {
-        this.showPanel(reader._window, { focus: "question" });
+        this.showPanel(reader._window, { focus: "question" })
+          .catch(e => this.reportError(reader._window, e));
       });
       append(button);
     };
@@ -956,9 +1016,15 @@ var DeepSeekAssistant = {
       button.className = "ai4zotero-selection-button";
       button.textContent = "Ask AI";
       button.style.cssText = "margin-left:4px;padding:3px 8px;border-radius:6px;border:1px solid rgba(0,0,0,.22);background:#fff;color:#1f2328;font:menu;";
-      button.addEventListener("click", () => {
-        let text = params?.annotation?.text || params?.text || "";
-        this.showPanel(reader._window, { context: text ? `Selected text:\n${text}` : "" });
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        let text = params?.annotation?.text || params?.text || this.getReaderSelection(reader) || "";
+        this.showPanel(reader._window, {
+          context: text ? `Selected text:\n${text}` : "",
+          question: "Explain the selected text and connect it to the paper's main contribution.",
+          focus: "question"
+        }).catch(e => this.reportError(reader._window, e));
       });
       append(button);
     };
@@ -969,7 +1035,11 @@ var DeepSeekAssistant = {
         label: "Ask DeepSeek about selection",
         onCommand: () => {
           let context = this.getAnnotationContextFromIDs(reader, params?.ids || []);
-          this.showPanel(reader._window, { context });
+          this.showPanel(reader._window, {
+            context,
+            question: "Explain these annotations and summarize why they matter.",
+            focus: "question"
+          }).catch(e => this.reportError(reader._window, e));
         }
       });
     };

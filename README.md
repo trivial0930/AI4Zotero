@@ -7,11 +7,11 @@ AI4Zotero is a Zotero 9 plugin for asking DeepSeek questions while reading paper
 - Adds an `AI4Zotero` entry to Zotero's toolbar and `Tools` menu.
 - Adds an `AI4Zotero` section and side-nav icon inside Zotero's native right item/context pane.
 - Adds an `AI` button to the Zotero Reader toolbar that jumps to the right-pane section.
-- Lets you configure your DeepSeek API key, endpoint, and model inside the panel.
+- Adds a settings gear in the AI panel and section header for configuring your DeepSeek API key, endpoint, and model.
 - Reads the active reader item, parent metadata, abstract, recent annotations, selected text, and Zotero full-text cache when available.
 - Adds `Ask AI` to the Reader text-selection popup.
 - Adds an annotation context-menu action for asking about selected annotations.
-- Includes quick prompts for summary, selection explanation, methods, and limitations.
+- Includes quick prompts for summary, problem, method, results, and selection explanation.
 
 ## DeepSeek Defaults
 
@@ -38,7 +38,7 @@ Open AI4Zotero from any of these places:
 - Zotero menu: `Tools` -> `AI4Zotero Settings`
 - Reader toolbar while viewing a PDF/EPUB: `AI`
 
-Then enter your DeepSeek API key in the panel and click `Save` or `Test`.
+Then click the settings gear in the AI4Zotero panel, enter your DeepSeek API key, and click `Save` or `Test`. Ask questions from the composer at the bottom of the panel.
 
 ## Build
 
