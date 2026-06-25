@@ -13,6 +13,7 @@ zip -X -r "$XPI" \
   manifest.json \
   bootstrap.js \
   chrome \
+  locale \
   README.md \
   -x '*.DS_Store'
 

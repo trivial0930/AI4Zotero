@@ -1,7 +1,3 @@
-#ai4zotero-splitter {
-  border-left: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.14));
-}
-
 #ai4zotero-panel {
   box-sizing: border-box;
   display: flex;
@@ -16,26 +12,23 @@
   font: message-box;
 }
 
-#ai4zotero-panel.ai4zotero-docked {
-  flex: 0 0 390px;
-  max-width: 520px;
-  border-left: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.14));
-}
-
 #ai4zotero-panel[hidden] {
   display: none;
 }
 
-#ai4zotero-panel.ai4zotero-floating {
-  position: fixed;
-  top: 88px;
-  right: 0;
-  bottom: 0;
-  z-index: 10000;
-  width: 390px;
+#ai4zotero-panel.ai4zotero-embedded {
+  min-width: 0;
   height: auto;
-  border-left: 1px solid rgba(0, 0, 0, 0.16);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16);
+  padding: 8px 0 2px;
+  background: transparent;
+}
+
+#ai4zotero-panel.ai4zotero-embedded .zda-icon-button {
+  display: none;
+}
+
+#ai4zotero-panel.ai4zotero-embedded .zda-subtitle {
+  max-width: 240px;
 }
 
 .zda-header,

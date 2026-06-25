@@ -10,6 +10,8 @@ try {
 const DeepSeekAssistant = {
   id: "ai4zotero@trivial0930.github.io",
   appName: "AI4Zotero",
+  paneID: "ai4zotero",
+  registeredPaneID: "",
   rootURI: "",
   windows: new Map(),
   readerHandlers: [],
@@ -34,11 +36,13 @@ const DeepSeekAssistant = {
     this.id = data.id || this.id;
     this.rootURI = data.rootURI || "";
     this.ensureDefaultPrefs();
+    this.registerItemPaneSection();
     this.registerReaderHooks();
   },
 
   shutdown() {
     this.unregisterReaderHooks();
+    this.unregisterItemPaneSection();
     for (let win of this.windows.keys()) {
       this.unloadWindow(win);
     }
@@ -76,6 +80,7 @@ const DeepSeekAssistant = {
     }
 
     let stylesheet = this.injectStylesheet(win);
+    this.injectLocalization(win);
 
     let doc = win.document;
     let button = doc.createXULElement("toolbarbutton");
@@ -92,12 +97,8 @@ const DeepSeekAssistant = {
 
     let menuitem = this.createToolsMenuItem(win);
 
-    let panel = this.createPanel(win);
-    let mount = this.mountPanel(win, panel);
-
-    let state = { button, menuitem, panel, stylesheet, ...mount };
+    let state = { button, menuitem, stylesheet };
     this.windows.set(win, state);
-    this.refreshContextPreview(win).catch(e => this.reportError(win, e));
   },
 
   unloadWindow(win) {
@@ -107,9 +108,8 @@ const DeepSeekAssistant = {
     }
     state.button?.remove();
     state.menuitem?.remove();
-    state.splitter?.remove();
-    state.panel?.remove();
     state.stylesheet?.remove();
+    win.document.querySelector('[href="ai4zotero.ftl"]')?.remove();
     this.windows.delete(win);
   },
 
@@ -123,6 +123,14 @@ const DeepSeekAssistant = {
     );
     win.document.insertBefore(pi, win.document.documentElement);
     return pi;
+  },
+
+  injectLocalization(win) {
+    try {
+      win.MozXULElement.insertFTLIfNeeded("ai4zotero.ftl");
+    } catch (e) {
+      Zotero.debug(`AI4Zotero: failed to inject localization: ${e}`);
+    }
   },
 
   createToolsMenuItem(win) {
@@ -145,36 +153,79 @@ const DeepSeekAssistant = {
     return item;
   },
 
-  mountPanel(win, panel) {
-    let doc = win.document;
-    let tabsDeck = doc.getElementById("tabs-deck");
-    let row = tabsDeck?.parentNode;
-    if (row) {
-      let splitter = doc.createXULElement("splitter");
-      splitter.id = "ai4zotero-splitter";
-      splitter.setAttribute("resizebefore", "closest");
-      splitter.setAttribute("resizeafter", "closest");
-      splitter.setAttribute("collapse", "after");
-      splitter.setAttribute("orient", "horizontal");
-      splitter.hidden = true;
-
-      panel.classList.add("ai4zotero-docked");
-      row.appendChild(splitter);
-      row.appendChild(panel);
-      return { splitter };
+  registerItemPaneSection() {
+    if (!Zotero.ItemPaneManager?.registerSection || this.registeredPaneID) {
+      return;
     }
 
-    let stack = doc.getElementById("zotero-pane-stack") || doc.documentElement;
-    stack.appendChild(panel);
-    panel.classList.add("ai4zotero-floating");
-    return { splitter: null };
+    let icon16 = this.getIconDataURI(16);
+    let icon20 = this.getIconDataURI(20);
+    this.registeredPaneID = Zotero.ItemPaneManager.registerSection({
+      paneID: this.paneID,
+      pluginID: this.id,
+      header: {
+        l10nID: "ai4zotero-section-header",
+        icon: icon16
+      },
+      sidenav: {
+        l10nID: "ai4zotero-section-sidenav",
+        icon: icon20,
+        orderable: true
+      },
+      onItemChange: ({ item, setEnabled, setSectionSummary }) => {
+        let enabled = !!item && typeof item.isNote === "function" && !item.isNote();
+        setEnabled(enabled);
+        setSectionSummary(this.getCharPref(this.prefs.apiKey, "") ? "Ready" : "API key required");
+      },
+      onRender: ({ doc, body }) => {
+        body.replaceChildren();
+        let win = doc.defaultView;
+        let panel = this.createPanel(win, { embedded: true });
+        panel.hidden = false;
+        body.append(panel);
+        this.refreshContextPreview(win).catch(e => this.reportError(win, e));
+      },
+      onToggle: ({ doc, body }) => {
+        let win = doc.defaultView;
+        let panel = body.querySelector("#ai4zotero-panel");
+        if (panel) {
+          this.populateSettings(panel);
+          this.updateConfigStatus(panel);
+          this.refreshContextPreview(win).catch(e => this.reportError(win, e));
+        }
+      }
+    }) || "";
   },
 
-  createPanel(win) {
+  unregisterItemPaneSection() {
+    if (!this.registeredPaneID || !Zotero.ItemPaneManager?.unregisterSection) {
+      return;
+    }
+    Zotero.ItemPaneManager.unregisterSection(this.registeredPaneID);
+    this.registeredPaneID = "";
+  },
+
+  getIconDataURI(size) {
+    let stroke = "#2271b1";
+    let svg = [
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 20 20">`,
+      `<rect x="2.5" y="2.5" width="15" height="15" rx="4" fill="none" stroke="${stroke}" stroke-width="1.8"/>`,
+      `<path d="M6 14l1.2-3.2h5.6L14 14M8 8.8h4" fill="none" stroke="${stroke}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>`,
+      `<path d="M9.9 4.9l.1-.4.1.4.4.1-.4.1-.1.4-.1-.4-.4-.1.4-.1z" fill="${stroke}"/>`,
+      `</svg>`
+    ].join("");
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  },
+
+  createPanel(win, options = {}) {
+    let { embedded = false } = options;
     let doc = win.document;
     let html = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
     html.id = "ai4zotero-panel";
     html.setAttribute("hidden", "true");
+    if (embedded) {
+      html.classList.add("ai4zotero-embedded");
+    }
     html.innerHTML = `
       <div class="zda-header">
         <div>
@@ -221,7 +272,16 @@ const DeepSeekAssistant = {
       </form>
     `;
 
-    html.querySelector('[data-action="close"]').addEventListener("click", () => this.hidePanel(win));
+    html.querySelector('[data-action="close"]').addEventListener("click", () => {
+      if (embedded) {
+        let section = html.closest("item-pane-custom-section");
+        if (section) {
+          section.open = false;
+        }
+      } else {
+        this.hidePanel(win);
+      }
+    });
     html.querySelector('[data-action="save-settings"]').addEventListener("click", () => this.saveSettings(win, true));
     html.querySelector('[data-action="test-api"]').addEventListener("click", () => {
       this.testConnection(win).catch(e => this.reportError(win, e));
@@ -267,30 +327,15 @@ const DeepSeekAssistant = {
   },
 
   togglePanel(win, seed = {}) {
-    let panel = this.getPanel(win);
-    if (!panel) {
-      return;
-    }
-    if (panel.hidden) {
-      this.showPanel(win, seed);
-    } else {
-      this.hidePanel(win);
-    }
+    this.showPanel(win, seed).catch(e => this.reportError(win, e));
   },
 
-  showPanel(win, seed = {}) {
-    if (!this.getPanel(win)) {
-      this.loadWindow(win);
-    }
-    let panel = this.getPanel(win);
+  async showPanel(win, seed = {}) {
+    let panel = await this.openItemPaneSection(win);
     if (!panel) {
-      return;
+      throw new Error("AI4Zotero section is not available for the current Zotero view.");
     }
     panel.hidden = false;
-    let splitter = this.windows.get(win)?.splitter;
-    if (splitter) {
-      splitter.hidden = false;
-    }
     if (seed.context) {
       let contextField = panel.querySelector('[data-field="context"]');
       contextField.value = this.mergeContext(seed.context, contextField.value);
@@ -298,12 +343,61 @@ const DeepSeekAssistant = {
     if (seed.question) {
       panel.querySelector('[data-field="question"]').value = seed.question;
     }
-    this.refreshContextPreview(win, seed.context).catch(e => this.reportError(win, e));
+    await this.refreshContextPreview(win, seed.context);
     if (seed.focus === "settings" || !this.getCharPref(this.prefs.apiKey, "")) {
       panel.querySelector('[data-role="settings"]').open = true;
       panel.querySelector('[data-field="apiKey"]').focus();
     } else {
       panel.querySelector('[data-field="question"]').focus();
+    }
+  },
+
+  async openItemPaneSection(win) {
+    let doc = win.document;
+    let paneID = this.registeredPaneID || this.paneID;
+    let container = null;
+
+    try {
+      if (win.Zotero_Tabs?.selectedType === "library") {
+        let itemPane = doc.getElementById("zotero-item-pane");
+        if (itemPane) {
+          itemPane.collapsed = false;
+          itemPane.render?.();
+        }
+        container = doc.getElementById("zotero-view-item-sidenav")?.container;
+      } else {
+        if (win.ZoteroContextPane) {
+          win.ZoteroContextPane.collapsed = false;
+          win.ZoteroContextPane.context.mode = "item";
+          win.ZoteroContextPane.update();
+        }
+        container = doc.getElementById("zotero-context-pane-sidenav")?.container;
+      }
+
+      if (!container) {
+        await Zotero.Promise.delay(100);
+        container = doc.getElementById("zotero-context-pane-sidenav")?.container
+          || doc.getElementById("zotero-view-item-sidenav")?.container;
+      }
+
+      if (!container) {
+        return null;
+      }
+
+      await container.render?.();
+      await Zotero.Promise.delay(50);
+      let pane = container.getPane?.(paneID);
+      if (pane) {
+        pane.open = true;
+        pane.hidden = false;
+      }
+      container.sidenav?.addPane?.(paneID);
+      container.sidenav?.updatePaneStatus?.(paneID);
+      await container.scrollToPane?.(paneID, "smooth");
+      return this.getPanel(win);
+    } catch (e) {
+      Zotero.debug(`AI4Zotero: failed to open item pane section: ${e}`);
+      return this.getPanel(win);
     }
   },
 
@@ -313,10 +407,6 @@ const DeepSeekAssistant = {
       return;
     }
     panel.hidden = true;
-    let splitter = this.windows.get(win)?.splitter;
-    if (splitter) {
-      splitter.hidden = true;
-    }
   },
 
   getPanel(win) {
@@ -590,6 +680,10 @@ const DeepSeekAssistant = {
 
   addMessage(win, role, text) {
     let panel = this.getPanel(win);
+    if (!panel) {
+      Zotero.debug(`AI4Zotero ${role}: ${text}`);
+      return null;
+    }
     let chat = panel.querySelector('[data-role="chat"]');
     let message = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
     message.className = `zda-message zda-${role}`;
