@@ -11,6 +11,7 @@ var DeepSeekAssistant = {
   windows: new Map(),
   readerWindows: new Map(),
   readerHandlers: [],
+  suppressAutoOpenUntil: 0,
   prefs: {
     apiKey: "extensions.ai4zotero.apiKey",
     endpoint: "extensions.ai4zotero.endpoint",
@@ -145,7 +146,10 @@ var DeepSeekAssistant = {
 
     let menuitem = this.createToolsMenuItem(win);
     let contextButton = this.createContextPaneButton(win);
-    let sideNavHandler = () => {
+    let sideNavHandler = event => {
+      if (event?.target?.closest?.("#ai4zotero-docked-panel, #ai4zotero-panel, #ai4zotero-context-button")) {
+        return;
+      }
       Zotero.Promise.delay(80).then(() => {
         this.openDockedPanelIfSelected(win).catch(e => this.reportError(win, e));
       });
@@ -481,9 +485,30 @@ var DeepSeekAssistant = {
     let button = (text, attrs = {}) => h("button", { type: "button", text, ...attrs });
     let input = (field, attrs = {}) => h("input", { "data-field": field, ...attrs });
     let label = (text, control) => h("label", {}, [doc.createTextNode(text), control]);
+    let iconButton = (icon, attrs = {}) => {
+      let elem = button("", { className: "zda-icon-button", ...attrs });
+      elem.append(h("img", {
+        className: "zda-button-icon",
+        src: `chrome://ai4zotero/content/icons/ui-${icon}.svg`,
+        alt: ""
+      }));
+      return elem;
+    };
 
     append(html, [
       h("div", { className: "zda-topbar" }, [
+        iconButton("close", {
+          className: "zda-icon-button zda-close-leading",
+          "data-action": "close",
+          title: "关闭",
+          "aria-label": "关闭"
+        }),
+        iconButton("settings", {
+          className: "zda-icon-button zda-settings-leading",
+          "data-action": "toggle-settings",
+          title: "DeepSeek 设置",
+          "aria-label": "DeepSeek 设置"
+        }),
         h("div", { className: "zda-title-group" }, [
           h("div", { className: "zda-title", text: "AI 阅读助手" }),
           h("div", {
@@ -491,11 +516,6 @@ var DeepSeekAssistant = {
             "data-role": "source",
             text: "等待读取当前文献"
           })
-        ]),
-        h("div", { className: "zda-top-actions" }, [
-          button("↻", { className: "zda-icon-button", "data-action": "refresh-context", title: "刷新上下文" }),
-          button("⚙", { className: "zda-icon-button", "data-action": "toggle-settings", title: "DeepSeek 设置" }),
-          button("×", { className: "zda-icon-button", "data-action": "close", title: "关闭" })
         ])
       ]),
       h("div", { className: "zda-status", "data-role": "config-status" }),
@@ -547,19 +567,10 @@ var DeepSeekAssistant = {
       ])
     ]);
 
-    html.querySelector('[data-action="close"]').addEventListener("click", () => {
-      if (embedded) {
-        let section = html.closest("item-pane-custom-section");
-        if (section) {
-          section.open = false;
-        } else {
-          html.closest("#ai4zotero-docked-host")?.setAttribute("hidden", "true");
-        }
-      } else if (standaloneReader) {
-        html.closest("#ai4zotero-reader-panel-box")?.setAttribute("hidden", "true");
-      } else {
-        this.hidePanel(win);
-      }
+    html.querySelector('[data-action="close"]').addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.closePanel(win, html);
     });
     html.querySelector('[data-action="toggle-settings"]').addEventListener("click", () => {
       this.toggleSettings(html);
@@ -757,6 +768,9 @@ var DeepSeekAssistant = {
   },
 
   async openDockedPanelIfSelected(win) {
+    if (Date.now() < this.suppressAutoOpenUntil) {
+      return null;
+    }
     let paneID = this.registeredPaneID || this.paneID;
     let selected = false;
     for (let itemDetails of win.document.querySelectorAll?.("item-details") || []) {
@@ -803,6 +817,21 @@ var DeepSeekAssistant = {
       return;
     }
     panel.hidden = true;
+  },
+
+  closePanel(win, panel = this.getPanel(win)) {
+    this.suppressAutoOpenUntil = Date.now() + 700;
+    if (!panel) {
+      return;
+    }
+    panel.hidden = true;
+    panel.closest("#ai4zotero-docked-host")?.setAttribute("hidden", "true");
+    panel.closest("#ai4zotero-reader-panel-box")?.setAttribute("hidden", "true");
+    let section = panel.closest("item-pane-custom-section");
+    if (section) {
+      section.open = false;
+      section.removeAttribute("open");
+    }
   },
 
   getPanel(win) {
