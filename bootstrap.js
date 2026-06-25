@@ -145,8 +145,15 @@ var DeepSeekAssistant = {
     }
 
     let menuitem = this.createToolsMenuItem(win);
+    let contextButton = this.createContextPaneButton(win);
+    let sideNavHandler = () => {
+      Zotero.Promise.delay(80).then(() => {
+        this.openDockedPanelIfSelected(win).catch(e => this.reportError(win, e));
+      });
+    };
+    doc.addEventListener("click", sideNavHandler, true);
 
-    let state = { button, menuitem, stylesheet };
+    let state = { button, menuitem, contextButton, stylesheet, sideNavHandler };
     this.windows.set(win, state);
     this.refreshItemPaneSections(win);
   },
@@ -156,8 +163,10 @@ var DeepSeekAssistant = {
     if (!state) {
       return;
     }
+    win.document.removeEventListener("click", state.sideNavHandler, true);
     state.button?.remove();
     state.menuitem?.remove();
+    state.contextButton?.remove();
     state.stylesheet?.remove();
     win.document.querySelector('[href="ai4zotero.ftl"]')?.remove();
     this.windows.delete(win);
@@ -250,11 +259,34 @@ var DeepSeekAssistant = {
     return item;
   },
 
+  createContextPaneButton(win) {
+    let doc = win.document;
+    let host = doc.getElementById("zotero-context-pane-inner")
+      || doc.getElementById("zotero-context-pane")
+      || doc.getElementById("zotero-item-pane");
+    if (!host || doc.getElementById("ai4zotero-context-button")) {
+      return null;
+    }
+    let button = doc.createElementNS("http://www.w3.org/1999/xhtml", "button");
+    button.id = "ai4zotero-context-button";
+    button.type = "button";
+    button.textContent = "AI";
+    button.title = "Open AI4Zotero";
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.showPanel(win, { focus: "question" }).catch(e => this.reportError(win, e));
+    });
+    host.append(button);
+    return button;
+  },
+
   refreshItemPaneSections(win) {
     try {
       for (let itemDetails of win.document.querySelectorAll("item-details")) {
         itemDetails.renderCustomSections?.();
         itemDetails.forceUpdateSideNav?.();
+        this.forceOpenRenderedSections(itemDetails);
       }
       win.ZoteroContextPane?.update?.();
       Zotero.debug("AI4Zotero: refreshed item pane sections");
@@ -302,25 +334,75 @@ var DeepSeekAssistant = {
       },
       onRender: ({ doc, body }) => {
         Zotero.debug("AI4Zotero: rendering item pane section");
+        this.forceOpenSectionBody(body);
         body.replaceChildren();
         let win = doc.defaultView;
         let panel = this.createPanel(win, { embedded: true });
         panel.hidden = false;
         body.append(panel);
+        this.forceOpenSectionBody(body);
+        Zotero.debug(`AI4Zotero: panel rendered controls=${panel.querySelectorAll("button,input,textarea").length} children=${panel.children.length}`);
         this.refreshContextPreview(win, "", panel).catch(e => this.reportError(win, e, panel));
       },
       onToggle: ({ doc, body }) => {
         let win = doc.defaultView;
+        Zotero.debug("AI4Zotero: item pane section toggled");
+        this.forceOpenSectionBody(body);
         let panel = body.querySelector("#ai4zotero-panel");
         if (panel) {
           this.populateSettings(panel);
           this.updateConfigStatus(panel);
           this.refreshContextPreview(win, "", panel).catch(e => this.reportError(win, e, panel));
+          Zotero.Promise.delay(80).then(() => {
+            if (!this.isPanelVisible(panel)) {
+              this.openDockedPanel(win).catch(e => this.reportError(win, e, panel));
+            }
+          });
         }
       }
     }) || "";
     Zotero.debug(`AI4Zotero: registered item pane section ${this.registeredPaneID}`);
     this.ensureItemPaneVisibilityPrefs();
+  },
+
+  forceOpenSectionBody(body) {
+    let section = body?.closest?.("collapsible-section");
+    let customSection = body?.closest?.("item-pane-custom-section");
+    if (customSection) {
+      customSection.hidden = false;
+      customSection.removeAttribute("hidden");
+      customSection.open = true;
+      customSection.setAttribute("open", "true");
+    }
+    if (body) {
+      body.hidden = false;
+      body.removeAttribute("hidden");
+      body.style.display = "block";
+      body.style.visibility = "visible";
+      body.style.minHeight = "540px";
+      body.style.overflow = "visible";
+    }
+    if (!section) {
+      return;
+    }
+    section.open = true;
+    section.hidden = false;
+    section.removeAttribute("hidden");
+    section.toggleAttribute("open", true);
+    section.setAttribute("open", "true");
+    section.collapsible = false;
+    section.style.setProperty("--open-height", "auto");
+    section.style.minHeight = "560px";
+    section.style.overflow = "visible";
+    section.render?.();
+  },
+
+  forceOpenRenderedSections(root) {
+    for (let body of root.querySelectorAll?.('item-pane-custom-section[data-pane] [data-type="body"]') || []) {
+      if (body.querySelector("#ai4zotero-panel")) {
+        this.forceOpenSectionBody(body);
+      }
+    }
   },
 
   ensureItemPaneVisibilityPrefs() {
@@ -358,14 +440,17 @@ var DeepSeekAssistant = {
   },
 
   createPanel(win, options = {}) {
-    let { embedded = false, standaloneReader = false } = options;
+    let { embedded = false, standaloneReader = false, docked = false } = options;
     let doc = win.document;
     let html = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
-    html.id = "ai4zotero-panel";
+    html.id = docked ? "ai4zotero-docked-panel" : "ai4zotero-panel";
     html.classList.add("ai4zotero-panel");
     html.setAttribute("hidden", "true");
     if (embedded) {
       html.classList.add("ai4zotero-embedded");
+    }
+    if (docked) {
+      html.classList.add("ai4zotero-docked");
     }
     if (standaloneReader) {
       html.classList.add("ai4zotero-standalone-reader");
@@ -468,6 +553,8 @@ var DeepSeekAssistant = {
         let section = html.closest("item-pane-custom-section");
         if (section) {
           section.open = false;
+        } else {
+          html.closest("#ai4zotero-docked-host")?.setAttribute("hidden", "true");
         }
       } else if (standaloneReader) {
         html.closest("#ai4zotero-reader-panel-box")?.setAttribute("hidden", "true");
@@ -549,8 +636,14 @@ var DeepSeekAssistant = {
 
   async showPanel(win, seed = {}) {
     let panel = await this.openItemPaneSection(win);
+    if (panel && !this.isPanelVisible(panel)) {
+      panel = await this.openDockedPanel(win);
+    }
     if (!panel) {
       panel = await this.openStandaloneReaderPanel(win);
+    }
+    if (!panel) {
+      panel = await this.openDockedPanel(win);
     }
     if (!panel) {
       throw new Error("AI4Zotero section is not available for the current Zotero view.");
@@ -619,6 +712,9 @@ var DeepSeekAssistant = {
         itemDetails.pinnedPane = paneID;
         await pane._forceRenderAll?.();
         panel = pane.querySelector("#ai4zotero-panel");
+        if (panel) {
+          this.forceOpenSectionBody(panel.parentElement);
+        }
       }
       await itemDetails.scrollToPane?.(paneID, "smooth");
       return panel || this.getPanel(win);
@@ -650,6 +746,58 @@ var DeepSeekAssistant = {
     return state.panel;
   },
 
+  async openDockedPanel(win) {
+    let panel = this.getOrCreateDockedPanel(win);
+    if (!panel) {
+      return null;
+    }
+    panel.closest("#ai4zotero-docked-host")?.removeAttribute("hidden");
+    panel.hidden = false;
+    await this.refreshContextPreview(win, "", panel);
+    return panel;
+  },
+
+  async openDockedPanelIfSelected(win) {
+    let paneID = this.registeredPaneID || this.paneID;
+    let selected = false;
+    for (let itemDetails of win.document.querySelectorAll?.("item-details") || []) {
+      if (itemDetails.pinnedPane === paneID || itemDetails.getAttribute?.("pinned-pane") === paneID) {
+        selected = true;
+        break;
+      }
+    }
+    if (!selected) {
+      return null;
+    }
+    Zotero.debug(`AI4Zotero: detected selected item pane ${paneID}, opening docked panel`);
+    return this.openDockedPanel(win);
+  },
+
+  getOrCreateDockedPanel(win) {
+    let doc = win?.document;
+    if (!doc) {
+      return null;
+    }
+    let existing = doc.getElementById("ai4zotero-docked-panel");
+    if (existing) {
+      return existing;
+    }
+    let hostParent = doc.getElementById("zotero-context-pane-inner")
+      || doc.getElementById("zotero-item-pane")
+      || doc.getElementById("zotero-context-pane");
+    if (!hostParent) {
+      return null;
+    }
+    let host = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    host.id = "ai4zotero-docked-host";
+    host.setAttribute("hidden", "true");
+    let panel = this.createPanel(win, { embedded: true, docked: true });
+    panel.hidden = false;
+    host.append(panel);
+    hostParent.append(host);
+    return panel;
+  },
+
   hidePanel(win) {
     let panel = this.getPanel(win);
     if (!panel) {
@@ -659,9 +807,24 @@ var DeepSeekAssistant = {
   },
 
   getPanel(win) {
-    return this.readerWindows.get(win)?.panel
-      || this.windows.get(win)?.panel
-      || win.document.getElementById("ai4zotero-panel");
+    let panels = [
+      this.readerWindows.get(win)?.panel,
+      win.document.getElementById("ai4zotero-docked-panel"),
+      ...Array.from(win.document.querySelectorAll?.(".ai4zotero-panel") || [])
+    ].filter(Boolean);
+    return panels.find(panel => !panel.hidden && this.isPanelVisible(panel)) || panels[0] || null;
+  },
+
+  isPanelVisible(panel) {
+    try {
+      if (!panel || panel.hidden || panel.closest("[hidden]")) {
+        return false;
+      }
+      let rect = panel.getBoundingClientRect?.();
+      return !rect || (rect.width > 80 && rect.height > 120);
+    } catch (e) {
+      return false;
+    }
   },
 
   saveSettings(win, announce = false, panel = this.getPanel(win)) {

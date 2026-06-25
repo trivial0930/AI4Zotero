@@ -26,8 +26,66 @@
   background: transparent;
 }
 
+#ai4zotero-docked-host {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 10px 10px 42px;
+  background: var(--material-background, #fff);
+}
+
+#ai4zotero-docked-host[hidden] {
+  display: none;
+}
+
+#ai4zotero-docked-panel.ai4zotero-docked {
+  min-height: 100%;
+  padding: 0;
+  background: transparent;
+}
+
+#zotero-context-pane-inner,
+#zotero-item-pane,
+#zotero-context-pane {
+  position: relative;
+}
+
+#ai4zotero-context-button {
+  position: absolute;
+  right: 42px;
+  bottom: 48px;
+  z-index: 60;
+  width: 34px;
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue, #2f80ed) 70%, transparent);
+  border-radius: 6px;
+  background: var(--material-background, #fff);
+  color: var(--accent-blue, #2f80ed);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .14);
+  font: message-box;
+  font-weight: 700;
+}
+
+#ai4zotero-context-button:hover {
+  background: color-mix(in srgb, var(--accent-blue, #2f80ed) 12%, var(--material-background, #fff));
+}
+
+item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
+  display: block !important;
+  min-height: 540px !important;
+  visibility: visible !important;
+}
+
 #ai4zotero-panel.ai4zotero-embedded [data-action="close"] {
   display: none;
+}
+
+#ai4zotero-docked-panel.ai4zotero-embedded [data-action="close"] {
+  display: inline-block;
 }
 
 #ai4zotero-reader-rail {
