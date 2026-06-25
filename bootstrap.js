@@ -22,9 +22,8 @@ var DeepSeekAssistant = {
     endpoint: "https://api.deepseek.com/chat/completions",
     model: "deepseek-v4-flash",
     systemPrompt:
-      "You are a careful academic reading assistant. Answer in the user's language. " +
-      "Use the supplied paper context when it is relevant, cite quoted snippets briefly, " +
-      "and say when the context is insufficient.",
+      "你是一个严谨的中文学术阅读助手。优先使用中文回答，除非用户明确要求其他语言。" +
+      "请基于提供的论文上下文作答，必要时简要引用关键片段；如果上下文不足，请明确说明。",
     maxContextChars: 14000
   },
 
@@ -136,7 +135,7 @@ var DeepSeekAssistant = {
     button.id = "ai4zotero-toolbar-button";
     button.className = "zotero-tb-button";
     button.setAttribute("label", "AI4Zotero");
-    button.setAttribute("tooltiptext", "Open AI4Zotero");
+    button.setAttribute("tooltiptext", "打开 AI4Zotero");
     button.addEventListener("command", () => this.togglePanel(win, { focus: "question" }));
 
     let toolbar = doc.getElementById("zotero-tabs-toolbar") || doc.getElementById("zotero-toolbar");
@@ -247,7 +246,7 @@ var DeepSeekAssistant = {
     }
     let item = doc.createXULElement("menuitem");
     item.id = "ai4zotero-tools-menuitem";
-    item.setAttribute("label", "AI4Zotero Settings");
+    item.setAttribute("label", "AI4Zotero 设置");
     item.addEventListener("command", () => this.showPanel(win, { focus: "settings" }));
 
     let pluginsItem = doc.getElementById("menu_addons");
@@ -271,7 +270,7 @@ var DeepSeekAssistant = {
     button.id = "ai4zotero-context-button";
     button.type = "button";
     button.textContent = "AI";
-    button.title = "Open AI4Zotero";
+    button.title = "打开 AI4Zotero";
     button.addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
@@ -330,7 +329,7 @@ var DeepSeekAssistant = {
       onItemChange: ({ item, setEnabled, setSectionSummary }) => {
         let enabled = !!item && typeof item.isNote === "function" && !item.isNote();
         setEnabled(enabled);
-        setSectionSummary(this.getCharPref(this.prefs.apiKey, "") ? "Ready" : "API key required");
+        setSectionSummary(this.getCharPref(this.prefs.apiKey, "") ? "已配置" : "需要 API Key");
       },
       onRender: ({ doc, body }) => {
         Zotero.debug("AI4Zotero: rendering item pane section");
@@ -486,48 +485,48 @@ var DeepSeekAssistant = {
     append(html, [
       h("div", { className: "zda-topbar" }, [
         h("div", { className: "zda-title-group" }, [
-          h("div", { className: "zda-title", text: "AI4Zotero" }),
+          h("div", { className: "zda-title", text: "AI 阅读助手" }),
           h("div", {
             className: "zda-subtitle",
             "data-role": "source",
-            text: "No paper context"
+            text: "等待读取当前文献"
           })
         ]),
         h("div", { className: "zda-top-actions" }, [
-          button("↻", { className: "zda-icon-button", "data-action": "refresh-context", title: "Refresh context" }),
-          button("⚙", { className: "zda-icon-button", "data-action": "toggle-settings", title: "DeepSeek settings" }),
-          button("×", { className: "zda-icon-button", "data-action": "close", title: "Close" })
+          button("↻", { className: "zda-icon-button", "data-action": "refresh-context", title: "刷新上下文" }),
+          button("⚙", { className: "zda-icon-button", "data-action": "toggle-settings", title: "DeepSeek 设置" }),
+          button("×", { className: "zda-icon-button", "data-action": "close", title: "关闭" })
         ])
       ]),
       h("div", { className: "zda-status", "data-role": "config-status" }),
       h("div", { className: "zda-settings", "data-role": "settings", hidden: true }, [
-        h("div", { className: "zda-section-title", text: "DeepSeek API" }),
+        h("div", { className: "zda-section-title", text: "DeepSeek API 设置" }),
         label("API Key", input("apiKey", { type: "password", placeholder: "sk-...", autocomplete: "off" })),
-        label("Endpoint", input("endpoint", { type: "url" })),
-        label("Model", input("model", { type: "text" })),
+        label("接口地址", input("endpoint", { type: "url" })),
+        label("模型", input("model", { type: "text" })),
         h("div", { className: "zda-settings-actions" }, [
-          button("Save", { "data-action": "save-settings" }),
-          button("Test", { "data-action": "test-api" })
+          button("保存", { "data-action": "save-settings" }),
+          button("测试连接", { "data-action": "test-api" })
         ])
       ]),
       h("div", { className: "zda-prompt-strip" }, [
-        button("Summary", { "data-prompt": "summarize" }),
-        button("Problem", { "data-prompt": "problem" }),
-        button("Method", { "data-prompt": "methods" }),
-        button("Results", { "data-prompt": "results" }),
-        button("Explain", { "data-prompt": "selection" })
+        button("论文速览", { "data-prompt": "summarize" }),
+        button("研究问题", { "data-prompt": "problem" }),
+        button("方法拆解", { "data-prompt": "methods" }),
+        button("实验结果", { "data-prompt": "results" }),
+        button("解释划线", { "data-prompt": "selection" })
       ]),
       h("div", { className: "zda-context" }, [
         h("div", { className: "zda-context-head" }, [
-          h("span", { className: "zda-section-title", text: "Context" }),
+          h("span", { className: "zda-section-title", text: "文献上下文" }),
           h("div", { className: "zda-context-actions" }, [
-            button("Use Paper", { "data-action": "refresh-context" }),
-            button("Clear", { "data-action": "clear-context" })
+            button("读取文献", { "data-action": "refresh-context" }),
+            button("清空", { "data-action": "clear-context" })
           ])
         ]),
         h("textarea", {
           "data-field": "context",
-          placeholder: "Paper, selection, annotations, and indexed full text appear here.",
+          placeholder: "当前文献、划线内容、批注和 Zotero 索引全文会显示在这里。",
           spellcheck: "false"
         })
       ]),
@@ -535,16 +534,16 @@ var DeepSeekAssistant = {
         h("div", {
           className: "zda-empty",
           "data-role": "empty",
-          text: "Ask anything about this paper, or highlight text and choose Ask AI."
+          text: "像在 alphaXiv 里一样，直接询问这篇文献；也可以划线后点击“问 AI”。"
         })
       ]),
       h("form", { className: "zda-composer", "data-role": "composer" }, [
         h("textarea", {
           "data-field": "question",
-          placeholder: "Ask or search anything in this paper...",
+          placeholder: "询问、检索或解释这篇文献中的任何内容...",
           rows: "3"
         }),
-        button("Ask", { type: "submit", className: "zda-ask-button", "data-action": "ask" })
+        button("提问", { type: "submit", className: "zda-ask-button", "data-action": "ask" })
       ])
     ]);
 
@@ -615,8 +614,8 @@ var DeepSeekAssistant = {
     let hasKey = Boolean(this.getCharPref(this.prefs.apiKey, ""));
     let model = this.getCharPref(this.prefs.model, this.defaults.model);
     status.textContent = hasKey
-      ? `DeepSeek configured. Model: ${model}`
-      : "Set your DeepSeek API key here before asking questions.";
+      ? `DeepSeek 已配置，当前模型：${model}`
+      : "请先填写 DeepSeek API Key，然后就可以向当前文献提问。";
     status.classList.toggle("zda-status-ready", hasKey);
   },
 
@@ -646,7 +645,7 @@ var DeepSeekAssistant = {
       panel = await this.openDockedPanel(win);
     }
     if (!panel) {
-      throw new Error("AI4Zotero section is not available for the current Zotero view.");
+      throw new Error("当前 Zotero 视图中无法打开 AI4Zotero 面板。");
     }
     panel.hidden = false;
     if (seed.context) {
@@ -829,32 +828,32 @@ var DeepSeekAssistant = {
 
   saveSettings(win, announce = false, panel = this.getPanel(win)) {
     if (!panel) {
-      throw new Error("AI4Zotero panel is not available.");
+      throw new Error("AI4Zotero 面板不可用。");
     }
     let apiKey = panel.querySelector('[data-field="apiKey"]').value.trim();
     let endpoint = panel.querySelector('[data-field="endpoint"]').value.trim() || this.defaults.endpoint;
     let model = panel.querySelector('[data-field="model"]').value.trim() || this.defaults.model;
     if (!/^https?:\/\//i.test(endpoint)) {
-      throw new Error("Endpoint must start with http:// or https://");
+      throw new Error("接口地址必须以 http:// 或 https:// 开头。");
     }
     this.setCharPref(this.prefs.apiKey, apiKey);
     this.setCharPref(this.prefs.endpoint, endpoint);
     this.setCharPref(this.prefs.model, model);
     this.updateConfigStatus(panel);
     if (announce) {
-      this.addMessage(win, "system", "Settings saved locally in Zotero preferences.", panel);
+      this.addMessage(win, "system", "设置已保存到 Zotero 本地偏好设置。", panel);
     }
     Zotero.debug(`AI4Zotero: settings saved (${apiKey ? "api key present" : "no api key"}, model ${model})`);
   },
 
   applyQuickPrompt(win, type, panel = this.getPanel(win)) {
     let prompts = {
-      summarize: "Summarize this paper in 6 bullet points, then list the main contribution and key evidence.",
-      problem: "What problem does this paper solve, and why is the problem important?",
-      selection: "Explain the selected text in plain language and relate it to the paper's main argument.",
-      methods: "Explain the method section: what problem is solved, what components are introduced, and how evaluation is designed.",
-      results: "Extract the main experimental results, compare them with baselines, and explain what they prove.",
-      limitations: "Identify the likely limitations, assumptions, and possible follow-up experiments for this paper."
+      summarize: "请用中文用 6 个要点概括这篇论文，并列出核心贡献、关键证据和适合继续追问的问题。",
+      problem: "这篇论文试图解决什么问题？这个问题为什么重要？请结合论文背景解释。",
+      selection: "请用通俗但严谨的中文解释我划线的内容，并说明它和论文主线之间的关系。",
+      methods: "请拆解这篇论文的方法：它引入了哪些组件、解决了什么难点、实验设计如何验证方法有效？",
+      results: "请提取主要实验结果，和基线方法进行对比，并说明这些结果证明了什么。",
+      limitations: "请分析这篇论文可能的局限、隐含假设，以及值得继续做的后续实验。"
     };
     panel.querySelector('[data-field="question"]').value = prompts[type] || prompts.summarize;
     this.refreshContextPreview(win, "", panel).catch(e => this.reportError(win, e, panel));
@@ -874,7 +873,7 @@ var DeepSeekAssistant = {
     let reader = this.getActiveReader(win);
     let item = reader?.itemID ? Zotero.Items.get(reader.itemID) : this.getSelectedAttachment(win);
     let title = await this.getDisplayTitle(item);
-    panel.querySelector('[data-role="source"]').textContent = title || "No reader detected";
+    panel.querySelector('[data-role="source"]').textContent = title || "未检测到当前阅读器";
   },
 
   mergeContext(newContext, oldContext) {
@@ -900,7 +899,7 @@ var DeepSeekAssistant = {
     if (item) {
       let title = await this.getDisplayTitle(item);
       if (title) {
-        parts.push(`Title: ${title}`);
+        parts.push(`标题：${title}`);
       }
       let parent = item.parentItemID ? Zotero.Items.get(item.parentItemID) : null;
       if (parent) {
@@ -909,28 +908,28 @@ var DeepSeekAssistant = {
           .filter(Boolean)
           .join(", ");
         if (creators) {
-          parts.push(`Authors: ${creators}`);
+          parts.push(`作者：${creators}`);
         }
         let abstractNote = parent.getField("abstractNote");
         if (abstractNote) {
-          parts.push(`Abstract: ${abstractNote}`);
+          parts.push(`摘要：${abstractNote}`);
         }
       }
     }
 
     let selectedText = this.getReaderSelection(reader);
     if (selectedText) {
-      parts.push(`Selected text:\n${selectedText}`);
+      parts.push(`划线内容：\n${selectedText}`);
     }
 
     let annotations = await this.getRecentAnnotations(item);
     if (annotations) {
-      parts.push(`Recent annotations:\n${annotations}`);
+      parts.push(`最近批注：\n${annotations}`);
     }
 
     let indexedText = await this.getIndexedAttachmentText(item);
     if (indexedText) {
-      parts.push(`Indexed attachment text:\n${indexedText}`);
+      parts.push(`Zotero 索引全文：\n${indexedText}`);
     }
 
     let maxChars = this.getIntPref(this.prefs.maxContextChars, this.defaults.maxContextChars);
@@ -978,7 +977,7 @@ var DeepSeekAssistant = {
         .map(annotation => {
           let text = annotation.annotationText || annotation.getField?.("annotationText") || "";
           let comment = annotation.annotationComment || annotation.getField?.("annotationComment") || "";
-          return [text, comment && `Comment: ${comment}`].filter(Boolean).join("\n");
+          return [text, comment && `批注：${comment}`].filter(Boolean).join("\n");
         })
         .filter(Boolean);
       return annotations.join("\n\n");
@@ -1015,7 +1014,7 @@ var DeepSeekAssistant = {
 
   async ask(win, panel = this.getPanel(win)) {
     if (!panel) {
-      throw new Error("AI4Zotero panel is not available.");
+      throw new Error("AI4Zotero 面板不可用。");
     }
     this.saveSettings(win, false, panel);
     let questionField = panel.querySelector('[data-field="question"]');
@@ -1026,7 +1025,7 @@ var DeepSeekAssistant = {
 
     let apiKey = this.getCharPref(this.prefs.apiKey, "");
     if (!apiKey) {
-      this.addMessage(win, "system", "Please set your DeepSeek API key first.", panel);
+      this.addMessage(win, "system", "请先填写 DeepSeek API Key。", panel);
       this.toggleSettings(panel, true);
       panel.querySelector('[data-field="apiKey"]').focus();
       return;
@@ -1040,8 +1039,8 @@ var DeepSeekAssistant = {
         {
           role: "user",
           content:
-            `Paper context:\n${context || "(No context available)"}\n\n` +
-            `Question:\n${question}`
+            `论文上下文：\n${context || "（当前没有可用上下文）"}\n\n` +
+            `问题：\n${question}`
         }
       ],
       temperature: 0.2,
@@ -1050,40 +1049,40 @@ var DeepSeekAssistant = {
 
     this.addMessage(win, "user", question, panel);
     questionField.value = "";
-    let pending = this.addMessage(win, "assistant", "Thinking...", panel);
+    let pending = this.addMessage(win, "assistant", "正在阅读并组织回答...", panel);
 
     try {
       let answer = await this.callDeepSeek(payload, apiKey);
       pending.textContent = answer;
     } catch (e) {
-      pending.textContent = `Request failed: ${e.message || e}`;
+      pending.textContent = `请求失败：${e.message || e}`;
     }
   },
 
   async testConnection(win, panel = this.getPanel(win)) {
     if (!panel) {
-      throw new Error("AI4Zotero panel is not available.");
+      throw new Error("AI4Zotero 面板不可用。");
     }
     this.saveSettings(win, false, panel);
     let apiKey = this.getCharPref(this.prefs.apiKey, "");
     if (!apiKey) {
-      this.addMessage(win, "system", "Please set your DeepSeek API key first.", panel);
+      this.addMessage(win, "system", "请先填写 DeepSeek API Key。", panel);
       panel.querySelector('[data-field="apiKey"]').focus();
       return;
     }
 
-    let pending = this.addMessage(win, "system", "Testing DeepSeek connection...", panel);
+    let pending = this.addMessage(win, "system", "正在测试 DeepSeek 连接...", panel);
     let payload = {
       model: this.getCharPref(this.prefs.model, this.defaults.model),
       messages: [
-        { role: "system", content: "Reply with exactly: OK" },
-        { role: "user", content: "Connection test" }
+        { role: "system", content: "请只回复：OK" },
+        { role: "user", content: "连接测试" }
       ],
       temperature: 0,
       stream: false
     };
     let answer = await this.callDeepSeek(payload, apiKey);
-    pending.textContent = `Connection OK. Response: ${answer}`;
+    pending.textContent = `连接成功。DeepSeek 返回：${answer}`;
   },
 
   async callDeepSeek(payload, apiKey) {
@@ -1115,7 +1114,7 @@ var DeepSeekAssistant = {
     }
     let content = response?.choices?.[0]?.message?.content;
     if (!content) {
-      throw new Error("DeepSeek returned an empty response.");
+      throw new Error("DeepSeek 返回了空响应。");
     }
     return content.trim();
   },
@@ -1154,7 +1153,7 @@ var DeepSeekAssistant = {
       button.className = "ai4zotero-reader-toolbar-button";
       button.type = "button";
       button.textContent = "AI";
-      button.title = "Open AI4Zotero";
+      button.title = "打开 AI4Zotero";
       button.style.cssText = [
         "height: 28px",
         "min-width: 32px",
@@ -1177,15 +1176,15 @@ var DeepSeekAssistant = {
       let { reader, doc, params, append } = event;
       let button = doc.createElement("button");
       button.className = "ai4zotero-selection-button";
-      button.textContent = "Ask AI";
-      button.style.cssText = "margin-left:4px;padding:3px 8px;border-radius:6px;border:1px solid rgba(0,0,0,.22);background:#fff;color:#1f2328;font:menu;";
+      button.textContent = "问 AI";
+      button.style.cssText = "margin-left:4px;padding:3px 8px;border-radius:6px;border:1px solid rgba(47,128,237,.38);background:#fff;color:#1f2328;font:menu;font-weight:600;";
       button.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
         let text = params?.annotation?.text || params?.text || this.getReaderSelection(reader) || "";
         this.showPanel(reader._window, {
-          context: text ? `Selected text:\n${text}` : "",
-          question: "Explain the selected text and connect it to the paper's main contribution.",
+          context: text ? `划线内容：\n${text}` : "",
+          question: "请解释这段划线内容，并说明它与论文核心贡献的关系。",
           focus: "question"
         }).catch(e => this.reportError(reader._window, e));
       });
@@ -1195,12 +1194,12 @@ var DeepSeekAssistant = {
     let annotationMenuHandler = event => {
       let { reader, params, append } = event;
       append({
-        label: "Ask DeepSeek about selection",
+        label: "用 DeepSeek 询问所选批注",
         onCommand: () => {
           let context = this.getAnnotationContextFromIDs(reader, params?.ids || []);
           this.showPanel(reader._window, {
             context,
-            question: "Explain these annotations and summarize why they matter.",
+            question: "请解释这些批注，并总结它们为什么重要。",
             focus: "question"
           }).catch(e => this.reportError(reader._window, e));
         }
@@ -1234,10 +1233,10 @@ var DeepSeekAssistant = {
         .map(annotation => {
           let text = annotation.annotationText || "";
           let comment = annotation.annotationComment || "";
-          return [text, comment && `Comment: ${comment}`].filter(Boolean).join("\n");
+          return [text, comment && `批注：${comment}`].filter(Boolean).join("\n");
         })
         .filter(Boolean);
-      return selected.length ? `Selected annotations:\n${selected.join("\n\n")}` : "";
+      return selected.length ? `所选批注：\n${selected.join("\n\n")}` : "";
     } catch (e) {
       Zotero.debug(`DeepSeek Assistant: annotation context failed: ${e}`);
       return "";

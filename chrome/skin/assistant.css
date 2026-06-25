@@ -3,13 +3,15 @@
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
   min-width: 320px;
   min-height: 560px;
   padding: 12px;
-  color: var(--fill-primary, #1f2328);
-  background: var(--material-background, #fff);
+  color: var(--fill-primary, #171717);
+  background:
+    radial-gradient(circle at 0 0, color-mix(in srgb, var(--accent-blue, #2f80ed) 10%, transparent), transparent 34%),
+    linear-gradient(180deg, color-mix(in srgb, var(--material-background, #fff) 86%, #f6f8fb), var(--material-background, #fff) 44%);
   font: message-box;
 }
 
@@ -34,8 +36,10 @@
   display: flex;
   flex-direction: column;
   overflow: auto;
-  padding: 10px 10px 42px;
-  background: var(--material-background, #fff);
+  padding: 10px 10px 44px;
+  background:
+    radial-gradient(circle at 100% 0, rgba(47, 128, 237, .08), transparent 32%),
+    var(--material-background, #fff);
 }
 
 #ai4zotero-docked-host[hidden] {
@@ -61,11 +65,11 @@
   z-index: 60;
   width: 34px;
   height: 30px;
-  border: 1px solid color-mix(in srgb, var(--accent-blue, #2f80ed) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-blue, #2f80ed) 68%, transparent);
   border-radius: 6px;
-  background: var(--material-background, #fff);
+  background: color-mix(in srgb, var(--material-background, #fff) 90%, var(--accent-blue, #2f80ed));
   color: var(--accent-blue, #2f80ed);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, .14);
+  box-shadow: 0 6px 18px rgba(21, 73, 140, .18);
   font: message-box;
   font-weight: 700;
 }
@@ -129,7 +133,16 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 }
 
 .zda-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   justify-content: space-between;
+  border: 1px solid color-mix(in srgb, var(--color-border, #d7dce3) 70%, transparent);
+  border-radius: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--material-background, #fff) 92%, transparent);
+  box-shadow: 0 8px 24px rgba(16, 24, 40, .06);
+  backdrop-filter: blur(8px);
 }
 
 .zda-title-group {
@@ -137,28 +150,29 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 }
 
 .zda-title {
-  font-size: 15px;
-  font-weight: 650;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .zda-subtitle {
   max-width: 240px;
   overflow: hidden;
   color: var(--fill-secondary, #5d6673);
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .zda-icon-button {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
   padding: 0;
-  border: 1px solid var(--color-border, #c8ced7);
+  border: 1px solid color-mix(in srgb, var(--color-border, #c8ced7) 78%, transparent);
   border-radius: 6px;
-  background: var(--material-button, #fff);
+  background: color-mix(in srgb, var(--material-button, #fff) 92%, transparent);
   color: var(--fill-primary, #1f2328);
   font-size: 14px;
   line-height: 1;
@@ -166,18 +180,18 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 
 .zda-icon-button:hover,
 .zda-icon-button.zda-active,
-#ai4zotero-panel button:hover {
-  background: var(--material-mix-quinary, #eef2f7);
+.ai4zotero-panel button:hover {
+  background: color-mix(in srgb, var(--accent-blue, #2f80ed) 10%, var(--material-button, #fff));
 }
 
 .zda-status {
-  border: 1px solid color-mix(in srgb, var(--accent-gold, #cc9200) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-gold, #cc9200) 36%, transparent);
   border-radius: 6px;
-  padding: 7px 8px;
-  background: color-mix(in srgb, var(--accent-gold, #cc9200) 12%, var(--material-background, #fff));
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--accent-gold, #cc9200) 10%, var(--material-background, #fff));
   color: var(--fill-primary, #1f2328);
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 1.45;
 }
 
 .zda-status-ready {
@@ -190,10 +204,11 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid var(--color-border, #d9dee5);
+  border: 1px solid color-mix(in srgb, var(--color-border, #d9dee5) 72%, transparent);
   border-radius: 8px;
   padding: 10px;
-  background: var(--material-sidepane, #f7f7f8);
+  background: color-mix(in srgb, var(--material-sidepane, #f7f7f8) 88%, var(--material-background, #fff));
+  box-shadow: 0 1px 0 rgba(16, 24, 40, .03);
 }
 
 .zda-section-title {
@@ -215,9 +230,9 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 .zda-composer textarea {
   box-sizing: border-box;
   width: 100%;
-  border: 1px solid var(--color-border, #c8ced7);
+  border: 1px solid color-mix(in srgb, var(--color-border, #c8ced7) 78%, transparent);
   border-radius: 6px;
-  background: var(--material-control, #fff);
+  background: color-mix(in srgb, var(--material-control, #fff) 94%, transparent);
   color: var(--fill-primary, #1f2328);
   font: message-box;
 }
@@ -235,7 +250,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 }
 
 .zda-prompt-strip {
-  padding-bottom: 2px;
+  padding: 2px 0;
 }
 
 .zda-context-head {
@@ -243,27 +258,28 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 }
 
 .zda-context textarea {
-  min-height: 82px;
-  max-height: 150px;
+  min-height: 96px;
+  max-height: 170px;
   padding: 8px;
   resize: vertical;
 }
 
 .zda-chat {
   flex: 1;
-  min-height: 170px;
+  min-height: 160px;
   max-height: 420px;
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 2px 2px 8px;
+  gap: 10px;
+  padding: 2px 1px 8px;
 }
 
 .zda-empty {
-  border: 1px dashed var(--color-border, #d6dbe3);
+  border: 1px dashed color-mix(in srgb, var(--color-border, #d6dbe3) 80%, transparent);
   border-radius: 8px;
-  padding: 12px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--material-background, #fff) 88%, var(--accent-blue, #2f80ed));
   color: var(--fill-secondary, #5d6673);
   line-height: 1.45;
 }
@@ -271,11 +287,11 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 .zda-message {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  border: 1px solid var(--color-border, #d6dbe3);
+  border: 1px solid color-mix(in srgb, var(--color-border, #d6dbe3) 80%, transparent);
   border-radius: 8px;
-  padding: 8px 9px;
+  padding: 10px;
   line-height: 1.45;
-  background: var(--material-sidepane, #f7f7f8);
+  background: color-mix(in srgb, var(--material-sidepane, #f7f7f8) 80%, var(--material-background, #fff));
 }
 
 .zda-user {
@@ -297,34 +313,51 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   position: sticky;
   bottom: 0;
   align-items: stretch;
-  padding-top: 6px;
-  background: var(--material-background, #fff);
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-blue, #2f80ed) 18%, var(--color-border, #d6dbe3));
+  border-radius: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--material-background, #fff) 94%, transparent);
+  box-shadow: 0 -8px 24px rgba(16, 24, 40, .08);
 }
 
 .zda-composer textarea {
   flex: 1;
-  min-height: 74px;
+  min-height: 76px;
   max-height: 170px;
+  border: 0;
   padding: 8px;
+  background: transparent;
   resize: vertical;
 }
 
 #ai4zotero-panel button,
+.ai4zotero-panel button,
 .ai4zotero-selection-button,
 .ai4zotero-reader-toolbar-button {
-  border: 1px solid var(--color-border, #b8c0cc);
+  border: 1px solid color-mix(in srgb, var(--color-border, #b8c0cc) 78%, transparent);
   border-radius: 6px;
-  background: var(--material-button, #fff);
+  background: color-mix(in srgb, var(--material-button, #fff) 94%, transparent);
   color: var(--fill-primary, #1f2328);
   min-height: 28px;
   padding: 4px 10px;
   font: message-box;
 }
 
+.zda-prompt-strip button,
+.zda-settings-actions button,
+.zda-context-actions button {
+  border-radius: 6px;
+  min-height: 26px;
+  padding: 3px 10px;
+  color: var(--fill-secondary, #4b5563);
+}
+
 .zda-ask-button {
-  min-width: 54px;
+  min-width: 58px;
   border-color: var(--accent-blue, #4072e5);
-  background: color-mix(in srgb, var(--accent-blue, #4072e5) 16%, var(--material-button, #fff));
+  background: color-mix(in srgb, var(--accent-blue, #4072e5) 18%, var(--material-button, #fff));
+  color: color-mix(in srgb, var(--accent-blue, #4072e5) 72%, var(--fill-primary, #1f2328));
   font-weight: 650;
 }
 
