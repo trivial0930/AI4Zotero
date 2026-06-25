@@ -439,23 +439,29 @@ var DeepSeekAssistant = {
         this.hidePanel(win);
       }
     });
-    html.querySelector('[data-action="save-settings"]').addEventListener("click", () => this.saveSettings(win, true));
+    html.querySelector('[data-action="save-settings"]').addEventListener("click", () => {
+      try {
+        this.saveSettings(win, true, html);
+      } catch (e) {
+        this.reportError(win, e, html);
+      }
+    });
     html.querySelector('[data-action="test-api"]').addEventListener("click", () => {
-      this.testConnection(win).catch(e => this.reportError(win, e));
+      this.testConnection(win, html).catch(e => this.reportError(win, e, html));
     });
     html.querySelector('[data-action="refresh-context"]').addEventListener("click", () => {
-      this.refreshContextPreview(win).catch(e => this.reportError(win, e));
+      this.refreshContextPreview(win, "", html).catch(e => this.reportError(win, e, html));
     });
     html.querySelector('[data-action="clear-context"]').addEventListener("click", () => {
       html.querySelector('[data-field="context"]').value = "";
     });
     html.querySelector('[data-role="composer"]').addEventListener("submit", event => {
       event.preventDefault();
-      this.ask(win).catch(e => this.reportError(win, e));
+      this.ask(win, html).catch(e => this.reportError(win, e, html));
     });
     for (let quickButton of html.querySelectorAll("[data-prompt]")) {
       quickButton.addEventListener("click", event => {
-        this.applyQuickPrompt(win, event.currentTarget.dataset.prompt);
+        this.applyQuickPrompt(win, event.currentTarget.dataset.prompt, html);
       });
     }
 
@@ -503,7 +509,7 @@ var DeepSeekAssistant = {
     if (seed.question) {
       panel.querySelector('[data-field="question"]').value = seed.question;
     }
-    await this.refreshContextPreview(win, seed.context);
+    await this.refreshContextPreview(win, seed.context, panel);
     if (seed.focus === "settings" || !this.getCharPref(this.prefs.apiKey, "")) {
       panel.querySelector('[data-role="settings"]').open = true;
       panel.querySelector('[data-field="apiKey"]').focus();
@@ -584,7 +590,7 @@ var DeepSeekAssistant = {
       return null;
     }
     state.box.removeAttribute("hidden");
-    await this.refreshContextPreview(win);
+    await this.refreshContextPreview(win, "", state.panel);
     return state.panel;
   },
 
@@ -602,32 +608,39 @@ var DeepSeekAssistant = {
       || win.document.getElementById("ai4zotero-panel");
   },
 
-  saveSettings(win, announce = false) {
-    let panel = this.getPanel(win);
-    this.setCharPref(this.prefs.apiKey, panel.querySelector('[data-field="apiKey"]').value.trim());
-    this.setCharPref(this.prefs.endpoint, panel.querySelector('[data-field="endpoint"]').value.trim() || this.defaults.endpoint);
-    this.setCharPref(this.prefs.model, panel.querySelector('[data-field="model"]').value.trim() || this.defaults.model);
+  saveSettings(win, announce = false, panel = this.getPanel(win)) {
+    if (!panel) {
+      throw new Error("AI4Zotero panel is not available.");
+    }
+    let apiKey = panel.querySelector('[data-field="apiKey"]').value.trim();
+    let endpoint = panel.querySelector('[data-field="endpoint"]').value.trim() || this.defaults.endpoint;
+    let model = panel.querySelector('[data-field="model"]').value.trim() || this.defaults.model;
+    if (!/^https?:\/\//i.test(endpoint)) {
+      throw new Error("Endpoint must start with http:// or https://");
+    }
+    this.setCharPref(this.prefs.apiKey, apiKey);
+    this.setCharPref(this.prefs.endpoint, endpoint);
+    this.setCharPref(this.prefs.model, model);
     this.updateConfigStatus(panel);
     if (announce) {
-      this.addMessage(win, "system", "Settings saved locally in Zotero preferences.");
+      this.addMessage(win, "system", "Settings saved locally in Zotero preferences.", panel);
     }
+    Zotero.debug(`AI4Zotero: settings saved (${apiKey ? "api key present" : "no api key"}, model ${model})`);
   },
 
-  applyQuickPrompt(win, type) {
+  applyQuickPrompt(win, type, panel = this.getPanel(win)) {
     let prompts = {
       summarize: "Summarize this paper in 6 bullet points, then list the main contribution and key evidence.",
       selection: "Explain the selected text in plain language and relate it to the paper's main argument.",
       methods: "Explain the method section: what problem is solved, what components are introduced, and how evaluation is designed.",
       limitations: "Identify the likely limitations, assumptions, and possible follow-up experiments for this paper."
     };
-    let panel = this.getPanel(win);
     panel.querySelector('[data-field="question"]').value = prompts[type] || prompts.summarize;
-    this.refreshContextPreview(win).catch(e => this.reportError(win, e));
+    this.refreshContextPreview(win, "", panel).catch(e => this.reportError(win, e, panel));
     panel.querySelector('[data-field="question"]').focus();
   },
 
-  async refreshContextPreview(win, seedContext = "") {
-    let panel = this.getPanel(win);
+  async refreshContextPreview(win, seedContext = "", panel = this.getPanel(win)) {
     if (!panel) {
       return;
     }
@@ -779,9 +792,11 @@ var DeepSeekAssistant = {
     }
   },
 
-  async ask(win) {
-    let panel = this.getPanel(win);
-    this.saveSettings(win);
+  async ask(win, panel = this.getPanel(win)) {
+    if (!panel) {
+      throw new Error("AI4Zotero panel is not available.");
+    }
+    this.saveSettings(win, false, panel);
     let questionField = panel.querySelector('[data-field="question"]');
     let question = questionField.value.trim();
     if (!question) {
@@ -790,7 +805,7 @@ var DeepSeekAssistant = {
 
     let apiKey = this.getCharPref(this.prefs.apiKey, "");
     if (!apiKey) {
-      this.addMessage(win, "system", "Please set your DeepSeek API key first.");
+      this.addMessage(win, "system", "Please set your DeepSeek API key first.", panel);
       panel.querySelector('[data-role="settings"]').open = true;
       panel.querySelector('[data-field="apiKey"]').focus();
       return;
@@ -812,9 +827,9 @@ var DeepSeekAssistant = {
       stream: false
     };
 
-    this.addMessage(win, "user", question);
+    this.addMessage(win, "user", question, panel);
     questionField.value = "";
-    let pending = this.addMessage(win, "assistant", "Thinking...");
+    let pending = this.addMessage(win, "assistant", "Thinking...", panel);
 
     try {
       let answer = await this.callDeepSeek(payload, apiKey);
@@ -824,17 +839,19 @@ var DeepSeekAssistant = {
     }
   },
 
-  async testConnection(win) {
-    let panel = this.getPanel(win);
-    this.saveSettings(win);
+  async testConnection(win, panel = this.getPanel(win)) {
+    if (!panel) {
+      throw new Error("AI4Zotero panel is not available.");
+    }
+    this.saveSettings(win, false, panel);
     let apiKey = this.getCharPref(this.prefs.apiKey, "");
     if (!apiKey) {
-      this.addMessage(win, "system", "Please set your DeepSeek API key first.");
+      this.addMessage(win, "system", "Please set your DeepSeek API key first.", panel);
       panel.querySelector('[data-field="apiKey"]').focus();
       return;
     }
 
-    let pending = this.addMessage(win, "system", "Testing DeepSeek connection...");
+    let pending = this.addMessage(win, "system", "Testing DeepSeek connection...", panel);
     let payload = {
       model: this.getCharPref(this.prefs.model, this.defaults.model),
       messages: [
@@ -853,15 +870,27 @@ var DeepSeekAssistant = {
     let xhr = await Zotero.HTTP.request("POST", endpoint, {
       headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
         "Authorization": `Bearer ${apiKey}`
       },
       body: JSON.stringify(payload),
-      responseType: "json"
+      responseType: "json",
+      successCodes: false,
+      errorDelayMax: 0,
+      timeout: 60000
     });
 
-    let response = xhr.response || JSON.parse(xhr.responseText || "{}");
+    let response = xhr.response;
+    if (!response && xhr.responseText) {
+      try {
+        response = JSON.parse(xhr.responseText);
+      } catch (e) {
+        response = {};
+      }
+    }
     if (xhr.status < 200 || xhr.status >= 300) {
-      throw new Error(response?.error?.message || `HTTP ${xhr.status}`);
+      let message = response?.error?.message || xhr.responseText || `HTTP ${xhr.status}`;
+      throw new Error(`DeepSeek API ${xhr.status}: ${message}`);
     }
     let content = response?.choices?.[0]?.message?.content;
     if (!content) {
@@ -870,8 +899,7 @@ var DeepSeekAssistant = {
     return content.trim();
   },
 
-  addMessage(win, role, text) {
-    let panel = this.getPanel(win);
+  addMessage(win, role, text, panel = this.getPanel(win)) {
     if (!panel) {
       Zotero.debug(`AI4Zotero ${role}: ${text}`);
       return null;
@@ -885,9 +913,9 @@ var DeepSeekAssistant = {
     return message;
   },
 
-  reportError(win, error) {
+  reportError(win, error, panel = this.getPanel(win)) {
     Zotero.debug(`DeepSeek Assistant: ${error?.stack || error}`);
-    this.addMessage(win, "system", error?.message || String(error));
+    this.addMessage(win, "system", error?.message || String(error), panel);
   },
 
   registerReaderHooks() {
