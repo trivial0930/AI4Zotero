@@ -1,0 +1,16 @@
+{
+  "manifest_version": 2,
+  "name": "AI4Zotero",
+  "version": "0.2.0",
+  "description": "Ask DeepSeek questions from a Zotero reader side panel with selected text, annotations, and paper context.",
+  "author": "trivial0930",
+  "homepage_url": "https://github.com/trivial0930/AI4Zotero",
+  "applications": {
+    "zotero": {
+      "id": "ai4zotero@trivial0930.github.io",
+      "update_url": "https://raw.githubusercontent.com/trivial0930/AI4Zotero/main/updates.json",
+      "strict_min_version": "9.0",
+      "strict_max_version": "9.0.*"
+    }
+  }
+}

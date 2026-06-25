@@ -1,0 +1,232 @@
+#ai4zotero-splitter {
+  border-left: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.14));
+}
+
+#ai4zotero-panel {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-width: 330px;
+  padding: 12px;
+  color: var(--color, #1f2328);
+  background: var(--material-background, #f7f7f8);
+  font: message-box;
+}
+
+#ai4zotero-panel.ai4zotero-docked {
+  flex: 0 0 390px;
+  max-width: 520px;
+  border-left: 1px solid var(--fill-quinary, rgba(0, 0, 0, 0.14));
+}
+
+#ai4zotero-panel[hidden] {
+  display: none;
+}
+
+#ai4zotero-panel.ai4zotero-floating {
+  position: fixed;
+  top: 88px;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  width: 390px;
+  height: auto;
+  border-left: 1px solid rgba(0, 0, 0, 0.16);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.16);
+}
+
+.zda-header,
+.zda-context-actions,
+.zda-composer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.zda-header {
+  justify-content: space-between;
+}
+
+.zda-title {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.zda-subtitle {
+  max-width: 290px;
+  overflow: hidden;
+  color: #5d6673;
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zda-icon-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #ccd2d9;
+  border-radius: 6px;
+  background: #fff;
+  color: #333942;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.zda-settings,
+.zda-context {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zda-settings {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #d9dee5;
+}
+
+.zda-settings summary {
+  cursor: pointer;
+  color: #24292f;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.zda-settings label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: #4b5563;
+  font-size: 12px;
+}
+
+.zda-status {
+  border: 1px solid #ead8a8;
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: #fff8e4;
+  color: #5c4a18;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.zda-status-ready {
+  border-color: #b9d8ca;
+  background: #edf8f2;
+  color: #24563f;
+}
+
+.zda-settings-actions,
+.zda-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.zda-quick-actions {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #d9dee5;
+}
+
+.zda-settings input,
+.zda-context textarea,
+.zda-composer textarea {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid #c8ced7;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2328;
+  font: message-box;
+}
+
+.zda-settings input {
+  height: 28px;
+  padding: 3px 7px;
+}
+
+.zda-section-title {
+  color: #4b5563;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.zda-context textarea {
+  min-height: 110px;
+  max-height: 180px;
+  padding: 7px;
+  resize: vertical;
+}
+
+.zda-chat {
+  flex: 1;
+  min-height: 120px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 2px 8px;
+}
+
+.zda-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border: 1px solid #d6dbe3;
+  border-radius: 8px;
+  padding: 8px 9px;
+  line-height: 1.45;
+  background: #fff;
+}
+
+.zda-user {
+  border-color: #8ab4f8;
+  background: #eef5ff;
+}
+
+.zda-assistant {
+  border-color: #c7ded7;
+  background: #f2faf6;
+}
+
+.zda-system {
+  border-color: #ead8a8;
+  background: #fff8e4;
+  color: #5c4a18;
+}
+
+.zda-composer {
+  align-items: stretch;
+}
+
+.zda-composer textarea {
+  flex: 1;
+  min-height: 76px;
+  padding: 8px;
+  resize: vertical;
+}
+
+#ai4zotero-panel button,
+.ai4zotero-selection-button,
+.ai4zotero-reader-toolbar-button {
+  border: 1px solid #b8c0cc;
+  border-radius: 6px;
+  background: #fff;
+  color: #1f2328;
+  min-height: 28px;
+  padding: 4px 10px;
+  font: message-box;
+}
+
+#ai4zotero-panel button:hover,
+.ai4zotero-selection-button:hover,
+.ai4zotero-reader-toolbar-button:hover {
+  background: #eef2f7;
+}
+
+.ai4zotero-selection-button {
+  margin-inline-start: 4px;
+}
