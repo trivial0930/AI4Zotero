@@ -1360,10 +1360,6 @@ var DeepSeekAssistant = {
     return instructions[effort] || instructions.balanced;
   },
 
-  mapReasoningEffort(effort) {
-    return ({ fast: "low", balanced: "medium", deep: "high" })[effort] || "medium";
-  },
-
   getTemperatureForStyle(style) {
     return style === "teacher" ? 0.35 : 0.2;
   },
@@ -1400,7 +1396,7 @@ var DeepSeekAssistant = {
       model: this.getCharPref(this.prefs.model, this.defaults.model),
       messages: [
         { role: "system", content: "请只回复：OK" },
-        { role: "user", content: "连接测试" }
+        { role: "user", content: [{ type: "text", text: "连接测试" }] }
       ],
       temperature: 0,
       stream: false
