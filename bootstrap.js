@@ -290,8 +290,13 @@ var DeepSeekAssistant = {
     let button = doc.createElementNS("http://www.w3.org/1999/xhtml", "button");
     button.id = "ai4zotero-context-button";
     button.type = "button";
-    button.textContent = "AI";
+    button.setAttribute("aria-label", "打开 AI4Zotero");
     button.title = "打开 AI4Zotero";
+    let icon = doc.createElementNS("http://www.w3.org/1999/xhtml", "img");
+    icon.className = "ai4zotero-context-button-icon";
+    icon.src = "chrome://ai4zotero/content/icons/app-icon.png";
+    icon.alt = "";
+    button.append(icon);
     let open = event => {
       event.preventDefault();
       event.stopPropagation();
