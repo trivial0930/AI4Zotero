@@ -713,6 +713,9 @@ var DeepSeekAssistant = {
     this.applyFontSize(html);
     this.updateConfigStatus(html);
     this.queueAutoContextRefresh(win, html, 300);
+    if (embedded || docked || standaloneReader) {
+      this.setContextButtonHidden(win, true);
+    }
     this.toggleSettings(html, !this.getCharPref(this.prefs.apiKey, ""));
     return html;
   },
@@ -953,6 +956,7 @@ var DeepSeekAssistant = {
     }
     let existing = doc.getElementById("ai4zotero-docked-panel");
     if (existing) {
+      this.setContextButtonHidden(win, true);
       return existing;
     }
     let hostParent = doc.getElementById("zotero-context-pane-inner")
@@ -968,6 +972,7 @@ var DeepSeekAssistant = {
     panel.hidden = false;
     host.append(panel);
     hostParent.append(host);
+    this.setContextButtonHidden(win, true);
     return panel;
   },
 
@@ -996,9 +1001,16 @@ var DeepSeekAssistant = {
   },
 
   setContextButtonHidden(win, hidden) {
-    let button = win?.document?.getElementById("ai4zotero-context-button");
-    if (button) {
+    let doc = win?.document;
+    if (!doc) {
+      return;
+    }
+    doc.documentElement?.classList?.toggle("ai4zotero-panel-open", hidden);
+    for (let button of doc.querySelectorAll?.("#ai4zotero-context-button") || []) {
       button.hidden = hidden;
+      button.toggleAttribute("hidden", hidden);
+      button.style.display = hidden ? "none" : "";
+      button.style.visibility = hidden ? "hidden" : "";
     }
   },
 
