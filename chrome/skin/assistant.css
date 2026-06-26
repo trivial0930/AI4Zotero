@@ -212,9 +212,14 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 .zda-close-leading,
 .zda-settings-leading {
   flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
 }
 
 .zda-icon-button {
+  appearance: none;
+  -moz-appearance: none;
+  box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -227,7 +232,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   background: color-mix(in srgb, var(--material-button, #fff) 92%, transparent);
   color: var(--fill-primary, #1f2328);
   font-size: 14px;
-  line-height: 1;
+  line-height: 0;
 }
 
 .zda-button-icon,
@@ -235,6 +240,9 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   display: block;
   width: 14px;
   height: 14px;
+  flex: 0 0 14px;
+  object-fit: contain;
+  pointer-events: none;
 }
 
 .zda-icon-button svg {

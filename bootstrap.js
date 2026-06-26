@@ -699,6 +699,18 @@ var DeepSeekAssistant = {
         .catch(e => this.reportError(win, e, html));
       event.currentTarget.value = "";
     });
+    html.querySelector('[data-field="question"]').addEventListener("keydown", event => {
+      if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) {
+        return;
+      }
+      event.preventDefault();
+      let composer = html.querySelector('[data-role="composer"]');
+      if (typeof composer.requestSubmit === "function") {
+        composer.requestSubmit();
+      } else {
+        composer.dispatchEvent(new win.Event("submit", { bubbles: true, cancelable: true }));
+      }
+    });
     html.querySelector('[data-role="composer"]').addEventListener("submit", event => {
       event.preventDefault();
       this.ask(win, html).catch(e => this.reportError(win, e, html));
