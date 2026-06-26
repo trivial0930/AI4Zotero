@@ -12,13 +12,17 @@ var DeepSeekAssistant = {
   readerWindows: new Map(),
   readerHandlers: [],
   suppressAutoOpenUntil: 0,
+  contextTimers: new WeakMap(),
   prefs: {
     apiKey: "extensions.ai4zotero.apiKey",
     endpoint: "extensions.ai4zotero.endpoint",
     model: "extensions.ai4zotero.model",
     systemPrompt: "extensions.ai4zotero.systemPrompt",
     maxContextChars: "extensions.ai4zotero.maxContextChars",
-    fontSize: "extensions.ai4zotero.fontSize"
+    fontSize: "extensions.ai4zotero.fontSize",
+    modelCapability: "extensions.ai4zotero.modelCapability",
+    reasoningEffort: "extensions.ai4zotero.reasoningEffort",
+    languageStyle: "extensions.ai4zotero.languageStyle"
   },
   defaults: {
     endpoint: "https://api.deepseek.com/chat/completions",
@@ -27,7 +31,10 @@ var DeepSeekAssistant = {
       "你是一个严谨的中文学术阅读助手。优先使用中文回答，除非用户明确要求其他语言。" +
       "请基于提供的论文上下文作答，必要时简要引用关键片段；如果上下文不足，请明确说明。",
     maxContextChars: 14000,
-    fontSize: "medium"
+    fontSize: "medium",
+    modelCapability: "text",
+    reasoningEffort: "balanced",
+    languageStyle: "academic"
   },
 
   async startup(data) {
@@ -104,6 +111,9 @@ var DeepSeekAssistant = {
     this.setDefaultCharPref(this.prefs.model, this.defaults.model);
     this.setDefaultCharPref(this.prefs.systemPrompt, this.defaults.systemPrompt);
     this.setDefaultCharPref(this.prefs.fontSize, this.defaults.fontSize);
+    this.setDefaultCharPref(this.prefs.modelCapability, this.defaults.modelCapability);
+    this.setDefaultCharPref(this.prefs.reasoningEffort, this.defaults.reasoningEffort);
+    this.setDefaultCharPref(this.prefs.languageStyle, this.defaults.languageStyle);
     this.setDefaultIntPref(this.prefs.maxContextChars, this.defaults.maxContextChars);
   },
 
@@ -152,6 +162,10 @@ var DeepSeekAssistant = {
     let sideNavHandler = event => {
       if (event?.target?.closest?.("#ai4zotero-docked-panel, #ai4zotero-panel, #ai4zotero-context-button")) {
         return;
+      }
+      let panel = this.getPanel(win);
+      if (panel && this.isPanelVisible(panel)) {
+        this.queueAutoContextRefresh(win, panel, 250);
       }
       Zotero.Promise.delay(80).then(() => {
         this.openDockedPanelIfSelected(win).catch(e => this.reportError(win, e));
@@ -566,6 +580,21 @@ var DeepSeekAssistant = {
         label("API Key", input("apiKey", { type: "password", placeholder: "sk-...", autocomplete: "off" })),
         label("接口地址", input("endpoint", { type: "url" })),
         label("模型", input("model", { type: "text" })),
+        label("模型能力", select("modelCapability", {}, [
+          { value: "text", label: "文本模型（DeepSeek 等）" },
+          { value: "multimodal", label: "多模态模型（图片/文件接口）" }
+        ])),
+        label("思考强度", select("reasoningEffort", {}, [
+          { value: "fast", label: "快速" },
+          { value: "balanced", label: "均衡" },
+          { value: "deep", label: "深入" }
+        ])),
+        label("语言风格", select("languageStyle", {}, [
+          { value: "academic", label: "学术严谨" },
+          { value: "concise", label: "简洁直接" },
+          { value: "teacher", label: "讲解式" },
+          { value: "reviewer", label: "审稿人视角" }
+        ])),
         label("阅读字号", select("fontSize", {}, [
           { value: "small", label: "紧凑" },
           { value: "medium", label: "标准" },
@@ -587,7 +616,7 @@ var DeepSeekAssistant = {
         h("div", { className: "zda-context-head" }, [
           h("span", { className: "zda-section-title", text: "文献上下文" }),
           h("div", { className: "zda-context-actions" }, [
-            button("读取文献", { "data-action": "refresh-context" }),
+            button("重新同步", { "data-action": "refresh-context" }),
             button("清空", { "data-action": "clear-context" })
           ])
         ]),
@@ -595,7 +624,10 @@ var DeepSeekAssistant = {
           "data-field": "context",
           placeholder: "当前文献、划线内容、批注和 Zotero 索引全文会显示在这里。",
           spellcheck: "false"
-        })
+        }),
+        h("div", { className: "zda-context-foot" }, [
+          h("span", { className: "zda-context-state", "data-role": "context-state", text: "将自动跟随当前打开文献更新" })
+        ])
       ]),
       h("div", { className: "zda-chat", "data-role": "chat" }, [
         emptyState()
@@ -606,11 +638,29 @@ var DeepSeekAssistant = {
           placeholder: "询问这篇论文，或解释当前划线内容...",
           rows: "3"
         }),
+        h("input", {
+          type: "file",
+          hidden: true,
+          multiple: true,
+          accept: "image/*,.txt,.md,.csv,.json,.pdf",
+          "data-field": "fileInput"
+        }),
+        h("div", { className: "zda-attachments", "data-role": "attachments" }),
         h("div", { className: "zda-composer-footer" }, [
           h("div", { className: "zda-mode-chips" }, [
-            h("span", { className: "zda-mode-chip", text: "Smart" }),
+            button("📎", { className: "zda-attach-button", "data-action": "attach-file", title: "插入图片或上传文件", "aria-label": "插入图片或上传文件" }),
+            select("composerReasoning", { className: "zda-mode-select", title: "思考强度" }, [
+              { value: "fast", label: "快速" },
+              { value: "balanced", label: "均衡" },
+              { value: "deep", label: "深入" }
+            ]),
             h("span", { className: "zda-mode-chip zda-mode-chip-accent", text: "Search" }),
-            h("span", { className: "zda-mode-chip", text: "Balanced" })
+            select("composerStyle", { className: "zda-mode-select", title: "语言风格" }, [
+              { value: "academic", label: "学术" },
+              { value: "concise", label: "简洁" },
+              { value: "teacher", label: "讲解" },
+              { value: "reviewer", label: "审稿" }
+            ])
           ]),
           button("↑", {
             type: "submit",
@@ -651,9 +701,26 @@ var DeepSeekAssistant = {
         this.reportError(win, e, html);
       }
     });
+    html.querySelector('[data-field="composerReasoning"]').addEventListener("change", event => {
+      this.setCharPref(this.prefs.reasoningEffort, event.currentTarget.value);
+      this.populateSettings(html);
+    });
+    html.querySelector('[data-field="composerStyle"]').addEventListener("change", event => {
+      this.setCharPref(this.prefs.languageStyle, event.currentTarget.value);
+      this.populateSettings(html);
+    });
+    html.querySelector('[data-action="attach-file"]').addEventListener("click", event => {
+      event.preventDefault();
+      html.querySelector('[data-field="fileInput"]').click();
+    });
+    html.querySelector('[data-field="fileInput"]').addEventListener("change", event => {
+      this.addFilesToPanel(win, html, Array.from(event.currentTarget.files || []))
+        .catch(e => this.reportError(win, e, html));
+      event.currentTarget.value = "";
+    });
     for (let refreshButton of html.querySelectorAll('[data-action="refresh-context"]')) {
       refreshButton.addEventListener("click", () => {
-        this.refreshContextPreview(win, "", html).catch(e => this.reportError(win, e, html));
+        this.refreshContextPreview(win, "", html, { force: true }).catch(e => this.reportError(win, e, html));
       });
     }
     for (let clearButton of html.querySelectorAll('[data-action="clear-context"]')) {
@@ -674,6 +741,7 @@ var DeepSeekAssistant = {
     this.populateSettings(html);
     this.applyFontSize(html);
     this.updateConfigStatus(html);
+    this.queueAutoContextRefresh(win, html, 300);
     this.toggleSettings(html, !this.getCharPref(this.prefs.apiKey, ""));
     return html;
   },
@@ -683,6 +751,11 @@ var DeepSeekAssistant = {
     panel.querySelector('[data-field="endpoint"]').value = this.getCharPref(this.prefs.endpoint, this.defaults.endpoint);
     panel.querySelector('[data-field="model"]').value = this.getCharPref(this.prefs.model, this.defaults.model);
     panel.querySelector('[data-field="fontSize"]').value = this.getCharPref(this.prefs.fontSize, this.defaults.fontSize);
+    panel.querySelector('[data-field="modelCapability"]').value = this.getCharPref(this.prefs.modelCapability, this.defaults.modelCapability);
+    panel.querySelector('[data-field="reasoningEffort"]').value = this.getCharPref(this.prefs.reasoningEffort, this.defaults.reasoningEffort);
+    panel.querySelector('[data-field="languageStyle"]').value = this.getCharPref(this.prefs.languageStyle, this.defaults.languageStyle);
+    panel.querySelector('[data-field="composerReasoning"]').value = this.getCharPref(this.prefs.reasoningEffort, this.defaults.reasoningEffort);
+    panel.querySelector('[data-field="composerStyle"]').value = this.getCharPref(this.prefs.languageStyle, this.defaults.languageStyle);
   },
 
   updateConfigStatus(panel) {
@@ -989,6 +1062,9 @@ var DeepSeekAssistant = {
     let endpoint = panel.querySelector('[data-field="endpoint"]').value.trim() || this.defaults.endpoint;
     let model = panel.querySelector('[data-field="model"]').value.trim() || this.defaults.model;
     let fontSize = panel.querySelector('[data-field="fontSize"]')?.value || this.defaults.fontSize;
+    let modelCapability = panel.querySelector('[data-field="modelCapability"]')?.value || this.defaults.modelCapability;
+    let reasoningEffort = panel.querySelector('[data-field="reasoningEffort"]')?.value || this.defaults.reasoningEffort;
+    let languageStyle = panel.querySelector('[data-field="languageStyle"]')?.value || this.defaults.languageStyle;
     if (!/^https?:\/\//i.test(endpoint)) {
       throw new Error("接口地址必须以 http:// 或 https:// 开头。");
     }
@@ -996,6 +1072,9 @@ var DeepSeekAssistant = {
     this.setCharPref(this.prefs.endpoint, endpoint);
     this.setCharPref(this.prefs.model, model);
     this.setCharPref(this.prefs.fontSize, fontSize);
+    this.setCharPref(this.prefs.modelCapability, modelCapability);
+    this.setCharPref(this.prefs.reasoningEffort, reasoningEffort);
+    this.setCharPref(this.prefs.languageStyle, languageStyle);
     this.applyFontSize(panel);
     this.updateConfigStatus(panel);
     if (announce) {
@@ -1017,24 +1096,64 @@ var DeepSeekAssistant = {
       limitations: "请分析这篇论文可能的局限、隐含假设，以及值得继续做的后续实验。"
     };
     panel.querySelector('[data-field="question"]').value = prompts[type] || prompts.summarize;
-    this.refreshContextPreview(win, "", panel).catch(e => this.reportError(win, e, panel));
+    this.refreshContextPreview(win, "", panel, { force: true }).catch(e => this.reportError(win, e, panel));
     panel.querySelector('[data-field="question"]').focus();
   },
 
-  async refreshContextPreview(win, seedContext = "", panel = this.getPanel(win)) {
+  async refreshContextPreview(win, seedContext = "", panel = this.getPanel(win), options = {}) {
     if (!panel) {
       return;
     }
+    let contextState = panel.querySelector('[data-role="context-state"]');
+    let key = await this.getCurrentContextKey(win);
+    if (!seedContext && !options.force && panel.dataset.contextKey === key && panel.querySelector('[data-field="context"]').value.trim()) {
+      return;
+    }
+    if (contextState) {
+      contextState.textContent = "正在自动读取当前文献...";
+    }
     let context = seedContext || await this.getCurrentContext(win);
     let field = panel.querySelector('[data-field="context"]');
-    if (!field.value.trim() || seedContext) {
+    if (seedContext) {
       field.value = this.mergeContext(context, field.value);
+    } else if (options.force || panel.dataset.contextKey !== key || !field.value.trim()) {
+      field.value = context;
     }
+    panel.dataset.contextKey = key;
 
     let reader = this.getActiveReader(win);
     let item = reader?.itemID ? Zotero.Items.get(reader.itemID) : this.getSelectedAttachment(win);
     let title = await this.getDisplayTitle(item);
     panel.querySelector('[data-role="source"]').textContent = title || "未检测到当前阅读器";
+    if (contextState) {
+      contextState.textContent = title ? `已自动读取：${title}` : "未检测到当前文献";
+    }
+  },
+
+  queueAutoContextRefresh(win, panel = this.getPanel(win), delay = 700) {
+    if (!panel) {
+      return;
+    }
+    let oldTimer = this.contextTimers.get(panel);
+    if (oldTimer) {
+      win.clearTimeout(oldTimer);
+    }
+    let timer = win.setTimeout(() => {
+      this.refreshContextPreview(win, "", panel)
+        .catch(e => this.reportError(win, e, panel));
+    }, delay);
+    this.contextTimers.set(panel, timer);
+  },
+
+  async getCurrentContextKey(win) {
+    let reader = this.getActiveReader(win);
+    let item = reader?.itemID ? Zotero.Items.get(reader.itemID) : this.getSelectedAttachment(win);
+    let tabID = win.Zotero_Tabs?.selectedID || "";
+    let page = reader?._state?.pageIndex ?? reader?.state?.pageIndex ?? "";
+    if (item?.id) {
+      return `${tabID}:${item.id}:${page}`;
+    }
+    return `${tabID}:no-item:${page}`;
   },
 
   mergeContext(newContext, oldContext) {
@@ -1178,6 +1297,7 @@ var DeepSeekAssistant = {
       throw new Error("AI4Zotero 面板不可用。");
     }
     this.saveSettings(win, false, panel);
+    await this.refreshContextPreview(win, "", panel);
     let questionField = panel.querySelector('[data-field="question"]');
     let question = questionField.value.trim();
     if (!question) {
@@ -1193,31 +1313,106 @@ var DeepSeekAssistant = {
     }
 
     let context = panel.querySelector('[data-field="context"]').value.trim() || await this.getCurrentContext(win);
-    let payload = {
-      model: this.getCharPref(this.prefs.model, this.defaults.model),
-      messages: [
-        { role: "system", content: this.getCharPref(this.prefs.systemPrompt, this.defaults.systemPrompt) },
-        {
-          role: "user",
-          content:
-            `论文上下文：\n${context || "（当前没有可用上下文）"}\n\n` +
-            `问题：\n${question}`
-        }
-      ],
-      temperature: 0.2,
-      stream: false
-    };
+    let attachments = this.getPanelAttachments(panel);
+    let modelCapability = this.getCharPref(this.prefs.modelCapability, this.defaults.modelCapability);
+    let payload = this.buildChatPayload(question, context, attachments, modelCapability);
 
-    this.addMessage(win, "user", question, panel);
+    this.addMessage(win, "user", question, panel, { attachments });
     questionField.value = "";
-    let pending = this.addMessage(win, "assistant", "正在阅读并组织回答...", panel);
+    panel._ai4zoteroAttachments = [];
+    this.renderAttachmentList(win, panel);
+    let pending = this.addMessage(win, "assistant", "正在阅读并组织回答...", panel, {
+      pending: true,
+      reasoningEffort: this.getCharPref(this.prefs.reasoningEffort, this.defaults.reasoningEffort)
+    });
 
     try {
       let answer = await this.callDeepSeek(payload, apiKey);
-      this.setMessageContent(win, pending, answer, "assistant");
+      this.setMessageContent(win, pending, answer, "assistant", { done: true });
     } catch (e) {
       this.setMessageContent(win, pending, `请求失败：${e.message || e}`, "system");
     }
+  },
+
+  buildChatPayload(question, context, attachments = [], modelCapability = "text") {
+    let reasoningEffort = this.getCharPref(this.prefs.reasoningEffort, this.defaults.reasoningEffort);
+    let languageStyle = this.getCharPref(this.prefs.languageStyle, this.defaults.languageStyle);
+    let systemPrompt = [
+      this.getCharPref(this.prefs.systemPrompt, this.defaults.systemPrompt),
+      this.getLanguageStyleInstruction(languageStyle),
+      this.getReasoningInstruction(reasoningEffort)
+    ].filter(Boolean).join("\n");
+    let attachmentText = this.describeAttachmentsForText(attachments, modelCapability);
+    let userText =
+      `论文上下文：\n${context || "（当前没有可用上下文）"}\n\n` +
+      `${attachmentText ? `用户补充材料：\n${attachmentText}\n\n` : ""}` +
+      `问题：\n${question}`;
+    let userContent = userText;
+    if (modelCapability === "multimodal") {
+      userContent = [{ type: "text", text: userText }];
+      for (let attachment of attachments) {
+        if (attachment.kind === "image" && attachment.dataURL) {
+          userContent.push({ type: "image_url", image_url: { url: attachment.dataURL } });
+        }
+      }
+    }
+    let payload = {
+      model: this.getCharPref(this.prefs.model, this.defaults.model),
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContent }
+      ],
+      temperature: this.getTemperatureForStyle(languageStyle),
+      stream: false
+    };
+    if (modelCapability === "multimodal") {
+      payload.reasoning_effort = this.mapReasoningEffort(reasoningEffort);
+    }
+    return payload;
+  },
+
+  getLanguageStyleInstruction(style) {
+    let styles = {
+      academic: "回答风格：学术严谨，保留必要术语，结构清楚。",
+      concise: "回答风格：简洁直接，优先给结论，再给必要依据。",
+      teacher: "回答风格：讲解式，先解释直觉，再连接论文细节。",
+      reviewer: "回答风格：审稿人视角，指出贡献、证据、假设和潜在局限。"
+    };
+    return styles[style] || styles.academic;
+  },
+
+  getReasoningInstruction(effort) {
+    let instructions = {
+      fast: "思考强度：快速。请给出短而明确的回答。",
+      balanced: "思考强度：均衡。请兼顾准确性和可读性。",
+      deep: "思考强度：深入。请分层分析，并在结尾给出总结。"
+    };
+    return instructions[effort] || instructions.balanced;
+  },
+
+  mapReasoningEffort(effort) {
+    return ({ fast: "low", balanced: "medium", deep: "high" })[effort] || "medium";
+  },
+
+  getTemperatureForStyle(style) {
+    return style === "teacher" ? 0.35 : 0.2;
+  },
+
+  describeAttachmentsForText(attachments = [], modelCapability = "text") {
+    if (!attachments.length) {
+      return "";
+    }
+    return attachments.map(attachment => {
+      if (attachment.kind === "text" && attachment.text) {
+        return `文件：${attachment.name}\n${attachment.text.slice(0, 4000)}`;
+      }
+      if (attachment.kind === "image") {
+        return modelCapability === "multimodal"
+          ? `图片：${attachment.name}（已作为多模态图片输入附加）`
+          : `图片：${attachment.name}（当前模型为文本模型，未发送图片内容）`;
+      }
+      return `文件：${attachment.name}（${attachment.type || "未知类型"}，当前仅作为文件名上下文）`;
+    }).join("\n\n");
   },
 
   async testConnection(win, panel = this.getPanel(win)) {
@@ -1244,6 +1439,94 @@ var DeepSeekAssistant = {
     };
     let answer = await this.callDeepSeek(payload, apiKey);
     this.setMessageContent(win, pending, `连接成功。DeepSeek 返回：${answer}`, "system");
+  },
+
+  async addFilesToPanel(win, panel, files) {
+    if (!files.length) {
+      return;
+    }
+    let attachments = panel._ai4zoteroAttachments || [];
+    for (let file of files.slice(0, 5)) {
+      attachments.push(await this.readAttachmentFile(win, file));
+    }
+    panel._ai4zoteroAttachments = attachments.slice(-8);
+    this.renderAttachmentList(win, panel);
+  },
+
+  async readAttachmentFile(win, file) {
+    let isImage = /^image\//i.test(file.type || "");
+    let isText = /^(text\/|application\/json)/i.test(file.type || "") || /\.(txt|md|csv|json)$/i.test(file.name || "");
+    if (isImage) {
+      return {
+        id: `${Date.now()}-${Math.random()}`,
+        kind: "image",
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataURL: await this.readFileAsDataURL(win, file)
+      };
+    }
+    if (isText) {
+      return {
+        id: `${Date.now()}-${Math.random()}`,
+        kind: "text",
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        text: await this.readFileAsText(win, file)
+      };
+    }
+    return {
+      id: `${Date.now()}-${Math.random()}`,
+      kind: "file",
+      name: file.name,
+      type: file.type,
+      size: file.size
+    };
+  },
+
+  readFileAsDataURL(win, file) {
+    return new Promise((resolve, reject) => {
+      let reader = new win.FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error || new Error("图片读取失败。"));
+      reader.readAsDataURL(file);
+    });
+  },
+
+  readFileAsText(win, file) {
+    return new Promise((resolve, reject) => {
+      let reader = new win.FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || new Error("文件读取失败。"));
+      reader.readAsText(file);
+    });
+  },
+
+  renderAttachmentList(win, panel) {
+    let wrap = panel.querySelector('[data-role="attachments"]');
+    if (!wrap) {
+      return;
+    }
+    wrap.replaceChildren();
+    let attachments = panel._ai4zoteroAttachments || [];
+    for (let attachment of attachments) {
+      let chip = win.document.createElementNS("http://www.w3.org/1999/xhtml", "button");
+      chip.type = "button";
+      chip.className = "zda-attachment-chip";
+      chip.textContent = `${attachment.kind === "image" ? "图片" : "文件"} · ${attachment.name}`;
+      chip.title = "点击移除此附件";
+      chip.addEventListener("click", () => {
+        panel._ai4zoteroAttachments = (panel._ai4zoteroAttachments || [])
+          .filter(item => item.id !== attachment.id);
+        this.renderAttachmentList(win, panel);
+      });
+      wrap.append(chip);
+    }
+  },
+
+  getPanelAttachments(panel) {
+    return panel._ai4zoteroAttachments || [];
   },
 
   async callDeepSeek(payload, apiKey) {
@@ -1280,7 +1563,7 @@ var DeepSeekAssistant = {
     return content.trim();
   },
 
-  addMessage(win, role, text, panel = this.getPanel(win)) {
+  addMessage(win, role, text, panel = this.getPanel(win), options = {}) {
     if (!panel) {
       Zotero.debug(`AI4Zotero ${role}: ${text}`);
       return null;
@@ -1289,13 +1572,13 @@ var DeepSeekAssistant = {
     chat.querySelector('[data-role="empty"]')?.remove();
     let message = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
     message.className = `zda-message zda-${role}`;
-    this.setMessageContent(win, message, text, role);
+    this.setMessageContent(win, message, text, role, options);
     chat.appendChild(message);
     chat.scrollTop = chat.scrollHeight;
     return message;
   },
 
-  setMessageContent(win, message, text, role) {
+  setMessageContent(win, message, text, role, options = {}) {
     if (!message) {
       return;
     }
@@ -1306,11 +1589,64 @@ var DeepSeekAssistant = {
     message.classList.add("zda-message", `zda-${role}`);
     if (role === "assistant") {
       message.classList.add("zda-markdown");
+      this.appendThinkingBar(win, message, options);
       this.renderMarkdown(win, message, text);
+      this.appendAssistantActions(win, message);
+    } else if (role === "user") {
+      message.classList.remove("zda-markdown");
+      let bubble = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+      bubble.className = "zda-user-bubble";
+      bubble.textContent = text;
+      message.append(bubble);
+      this.appendMessageAttachments(win, message, options.attachments || []);
     } else {
       message.classList.remove("zda-markdown");
       message.textContent = text;
     }
+  },
+
+  appendThinkingBar(win, message, options = {}) {
+    let bar = win.document.createElementNS("http://www.w3.org/1999/xhtml", "details");
+    bar.className = "zda-thinking";
+    bar.open = Boolean(options.pending);
+    let summary = win.document.createElementNS("http://www.w3.org/1999/xhtml", "summary");
+    let effort = ({ fast: "快速", balanced: "均衡", deep: "深入" })[options.reasoningEffort] || "均衡";
+    summary.textContent = options.pending ? `Thinking... · ${effort}` : "Thinking Finished";
+    let body = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    body.textContent = options.pending ? "正在结合当前文献、划线和补充材料组织回答。" : "已完成阅读与组织。";
+    bar.append(summary, body);
+    message.append(bar);
+  },
+
+  appendAssistantActions(win, message) {
+    let actions = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    actions.className = "zda-message-actions";
+    for (let item of ["赞", "踩", "复制"]) {
+      let button = win.document.createElementNS("http://www.w3.org/1999/xhtml", "button");
+      button.type = "button";
+      button.textContent = item;
+      if (item === "复制") {
+        button.addEventListener("click", () => {
+          win.navigator?.clipboard?.writeText?.(message.innerText || "");
+        });
+      }
+      actions.append(button);
+    }
+    message.append(actions);
+  },
+
+  appendMessageAttachments(win, message, attachments = []) {
+    if (!attachments.length) {
+      return;
+    }
+    let wrap = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    wrap.className = "zda-message-attachments";
+    for (let attachment of attachments) {
+      let chip = win.document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      chip.textContent = `${attachment.kind === "image" ? "图片" : "文件"} · ${attachment.name}`;
+      wrap.append(chip);
+    }
+    message.append(wrap);
   },
 
   renderMarkdown(win, container, text) {

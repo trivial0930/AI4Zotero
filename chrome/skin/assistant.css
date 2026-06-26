@@ -145,7 +145,11 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 .zda-composer,
 .zda-sessionbar,
 .zda-composer-footer,
-.zda-mode-chips {
+.zda-mode-chips,
+.zda-context-foot,
+.zda-attachments,
+.zda-message-actions,
+.zda-message-attachments {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -324,6 +328,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 
 .zda-settings input,
 .zda-settings select,
+.zda-mode-select,
 .zda-context textarea,
 .zda-composer textarea {
   box-sizing: border-box;
@@ -362,11 +367,22 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 
 .zda-context textarea {
   min-height: 96px;
-  max-height: 170px;
+  max-height: 142px;
   padding: 8px;
   resize: vertical;
   font-size: var(--zda-composer-font-size);
   line-height: 1.5;
+}
+
+.zda-context-foot {
+  justify-content: space-between;
+  min-height: 18px;
+}
+
+.zda-context-state {
+  color: var(--fill-secondary, #71717a);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .zda-chat {
@@ -440,27 +456,92 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 .zda-message {
   white-space: normal;
   overflow-wrap: anywhere;
-  border: 1px solid var(--zda-border);
-  border-radius: 8px;
-  padding: 12px;
+  border: 0;
+  border-radius: 0;
+  padding: 2px 0;
   font-size: var(--zda-chat-font-size);
-  line-height: 1.62;
-  background: color-mix(in srgb, var(--material-sidepane, #f7f7f8) 80%, var(--material-background, #fff));
+  line-height: 1.7;
+  background: transparent;
 }
 
 .zda-user {
-  border-color: color-mix(in srgb, #8aa8ff 55%, transparent);
-  background: color-mix(in srgb, #8aa8ff 12%, var(--material-background, #fff));
+  align-self: stretch;
 }
 
 .zda-assistant {
-  border-color: color-mix(in srgb, #6dd58f 46%, transparent);
-  background: color-mix(in srgb, #6dd58f 10%, var(--material-background, #fff));
+  color: var(--fill-primary, #202124);
 }
 
 .zda-system {
-  border-color: color-mix(in srgb, var(--accent-gold, #cc9200) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-gold, #cc9200) 45%, transparent);
+  border-radius: 8px;
+  padding: 9px 10px;
   background: color-mix(in srgb, var(--accent-gold, #cc9200) 12%, var(--material-background, #fff));
+}
+
+.zda-user-bubble {
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--material-sidepane, #f7f7f8) 88%, #f3f3f3);
+  color: var(--fill-primary, #202124);
+  font-size: calc(var(--zda-chat-font-size) + 1px);
+  line-height: 1.55;
+}
+
+.zda-thinking {
+  margin: 8px 0 14px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--material-sidepane, #f7f7f8) 88%, #f3f3f3);
+  color: var(--zda-accent);
+}
+
+.zda-thinking summary {
+  cursor: pointer;
+  padding: 10px 12px;
+  font-weight: 700;
+  list-style: none;
+}
+
+.zda-thinking summary::-webkit-details-marker {
+  display: none;
+}
+
+.zda-thinking div {
+  border-top: 1px solid var(--zda-border);
+  padding: 8px 12px 10px;
+  color: var(--fill-secondary, #71717a);
+  font-size: 12px;
+}
+
+.zda-message-actions {
+  justify-content: flex-end;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.zda-message-actions button {
+  min-height: 24px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--fill-secondary, #70757e) !important;
+  padding: 2px 6px !important;
+  font-size: 12px !important;
+}
+
+.zda-message-attachments {
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.zda-message-attachments span,
+.zda-attachment-chip {
+  border: 1px solid var(--zda-border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--material-background, #fff) 94%, #f6f6f6);
+  color: var(--fill-secondary, #71717a);
+  font-size: 12px;
 }
 
 .zda-composer {
@@ -497,6 +578,20 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   gap: 6px;
 }
 
+.zda-attachments {
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 2px 4px;
+}
+
+.zda-attachment-chip {
+  max-width: 100%;
+  min-height: 24px !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .zda-mode-chip {
   border: 1px solid var(--zda-border);
   border-radius: 999px;
@@ -511,6 +606,27 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   border-color: transparent;
   background: var(--zda-accent-soft);
   color: var(--zda-accent);
+}
+
+.zda-attach-button {
+  width: 34px;
+  min-width: 34px !important;
+  height: 34px;
+  min-height: 34px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
+  color: var(--fill-secondary, #6f737a) !important;
+}
+
+.zda-mode-select {
+  width: auto;
+  max-width: 96px;
+  min-height: 34px;
+  border-radius: 999px;
+  padding: 3px 10px;
+  color: var(--fill-secondary, #6f737a);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 #ai4zotero-panel button,
@@ -549,7 +665,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 }
 
 .zda-markdown p {
-  margin: 0 0 10px;
+  margin: 0 0 14px;
 }
 
 .zda-markdown p:last-child,
@@ -564,7 +680,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 .zda-markdown h6 {
   margin: 14px 0 7px;
   color: var(--fill-primary, #202124);
-  font-size: calc(var(--zda-chat-font-size) + 1px);
+  font-size: calc(var(--zda-chat-font-size) + 3px);
   line-height: 1.35;
 }
 
@@ -580,7 +696,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 }
 
 .zda-markdown li {
-  margin: 3px 0;
+  margin: 6px 0;
 }
 
 .zda-markdown code {
