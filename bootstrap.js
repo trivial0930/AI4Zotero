@@ -17,7 +17,8 @@ var DeepSeekAssistant = {
     endpoint: "extensions.ai4zotero.endpoint",
     model: "extensions.ai4zotero.model",
     systemPrompt: "extensions.ai4zotero.systemPrompt",
-    maxContextChars: "extensions.ai4zotero.maxContextChars"
+    maxContextChars: "extensions.ai4zotero.maxContextChars",
+    fontSize: "extensions.ai4zotero.fontSize"
   },
   defaults: {
     endpoint: "https://api.deepseek.com/chat/completions",
@@ -25,7 +26,8 @@ var DeepSeekAssistant = {
     systemPrompt:
       "你是一个严谨的中文学术阅读助手。优先使用中文回答，除非用户明确要求其他语言。" +
       "请基于提供的论文上下文作答，必要时简要引用关键片段；如果上下文不足，请明确说明。",
-    maxContextChars: 14000
+    maxContextChars: 14000,
+    fontSize: "medium"
   },
 
   async startup(data) {
@@ -101,6 +103,7 @@ var DeepSeekAssistant = {
     this.setDefaultCharPref(this.prefs.endpoint, this.defaults.endpoint);
     this.setDefaultCharPref(this.prefs.model, this.defaults.model);
     this.setDefaultCharPref(this.prefs.systemPrompt, this.defaults.systemPrompt);
+    this.setDefaultCharPref(this.prefs.fontSize, this.defaults.fontSize);
     this.setDefaultIntPref(this.prefs.maxContextChars, this.defaults.maxContextChars);
   },
 
@@ -275,11 +278,14 @@ var DeepSeekAssistant = {
     button.type = "button";
     button.textContent = "AI";
     button.title = "打开 AI4Zotero";
-    button.addEventListener("click", event => {
+    let open = event => {
       event.preventDefault();
       event.stopPropagation();
       this.showPanel(win, { focus: "question" }).catch(e => this.reportError(win, e));
-    });
+    };
+    button.addEventListener("click", open);
+    button.addEventListener("mousedown", open);
+    button.addEventListener("pointerup", open);
     host.append(button);
     return button;
   },
@@ -484,6 +490,11 @@ var DeepSeekAssistant = {
     };
     let button = (text, attrs = {}) => h("button", { type: "button", text, ...attrs });
     let input = (field, attrs = {}) => h("input", { "data-field": field, ...attrs });
+    let select = (field, attrs = {}, options = []) => h(
+      "select",
+      { "data-field": field, ...attrs },
+      options.map(option => h("option", { value: option.value, text: option.label }))
+    );
     let label = (text, control) => h("label", {}, [doc.createTextNode(text), control]);
     let iconButton = (icon, attrs = {}) => {
       let elem = button("", { className: "zda-icon-button", ...attrs });
@@ -494,6 +505,27 @@ var DeepSeekAssistant = {
       }));
       return elem;
     };
+    let emptyState = () => h("div", { className: "zda-empty", "data-role": "empty" }, [
+      h("div", { className: "zda-empty-spark", text: "✦" }),
+      h("div", { className: "zda-empty-grid" }, [
+        h("div", { className: "zda-empty-card" }, [
+          h("div", { className: "zda-card-icon", text: "⌁" }),
+          h("strong", { text: "划线并提问" }),
+          h("p", { text: "选中论文任意段落后点击“问 AI”，让回答紧扣原文。" })
+        ]),
+        h("div", { className: "zda-empty-card" }, [
+          h("div", { className: "zda-card-icon", text: "@" }),
+          h("strong", { text: "加入文献上下文" }),
+          h("p", { text: "读取标题、摘要、批注和 Zotero 索引全文，再追问细节。" })
+        ]),
+        h("div", { className: "zda-empty-card zda-empty-wide" }, [
+          h("div", { className: "zda-card-icon", text: "+" }),
+          h("strong", { text: "继续研究" }),
+          h("p", { text: "让助手梳理贡献、局限、实验结果和可复现实验线索。" })
+        ])
+      ]),
+      h("div", { className: "zda-empty-tip", text: "试着问：“第三节方法背后的直觉是什么？”" })
+    ]);
 
     append(html, [
       h("div", { className: "zda-topbar" }, [
@@ -518,12 +550,27 @@ var DeepSeekAssistant = {
           })
         ])
       ]),
+      h("div", { className: "zda-tabs", role: "tablist" }, [
+        button("Assistant", { className: "zda-tab zda-tab-active", role: "tab", "aria-selected": "true" }),
+        button("My Notes", { className: "zda-tab", role: "tab", disabled: true, title: "后续版本开放" }),
+        button("Comments", { className: "zda-tab", role: "tab", disabled: true, title: "后续版本开放" }),
+        button("Similar", { className: "zda-tab", role: "tab", disabled: true, title: "后续版本开放" })
+      ]),
+      h("div", { className: "zda-sessionbar" }, [
+        button("＋ 新对话", { "data-action": "new-chat", className: "zda-session-button" }),
+        button("↺ 历史", { className: "zda-session-button", disabled: true, title: "历史记录会在后续版本开放" })
+      ]),
       h("div", { className: "zda-status", "data-role": "config-status" }),
       h("div", { className: "zda-settings", "data-role": "settings", hidden: true }, [
         h("div", { className: "zda-section-title", text: "DeepSeek API 设置" }),
         label("API Key", input("apiKey", { type: "password", placeholder: "sk-...", autocomplete: "off" })),
         label("接口地址", input("endpoint", { type: "url" })),
         label("模型", input("model", { type: "text" })),
+        label("阅读字号", select("fontSize", {}, [
+          { value: "small", label: "紧凑" },
+          { value: "medium", label: "标准" },
+          { value: "large", label: "舒适" }
+        ])),
         h("div", { className: "zda-settings-actions" }, [
           button("保存", { "data-action": "save-settings" }),
           button("测试连接", { "data-action": "test-api" })
@@ -551,19 +598,28 @@ var DeepSeekAssistant = {
         })
       ]),
       h("div", { className: "zda-chat", "data-role": "chat" }, [
-        h("div", {
-          className: "zda-empty",
-          "data-role": "empty",
-          text: "像在 alphaXiv 里一样，直接询问这篇文献；也可以划线后点击“问 AI”。"
-        })
+        emptyState()
       ]),
       h("form", { className: "zda-composer", "data-role": "composer" }, [
         h("textarea", {
           "data-field": "question",
-          placeholder: "询问、检索或解释这篇文献中的任何内容...",
+          placeholder: "询问这篇论文，或解释当前划线内容...",
           rows: "3"
         }),
-        button("提问", { type: "submit", className: "zda-ask-button", "data-action": "ask" })
+        h("div", { className: "zda-composer-footer" }, [
+          h("div", { className: "zda-mode-chips" }, [
+            h("span", { className: "zda-mode-chip", text: "Smart" }),
+            h("span", { className: "zda-mode-chip zda-mode-chip-accent", text: "Search" }),
+            h("span", { className: "zda-mode-chip", text: "Balanced" })
+          ]),
+          button("↑", {
+            type: "submit",
+            className: "zda-ask-button",
+            "data-action": "ask",
+            title: "发送问题",
+            "aria-label": "发送问题"
+          })
+        ])
       ])
     ]);
 
@@ -584,6 +640,16 @@ var DeepSeekAssistant = {
     });
     html.querySelector('[data-action="test-api"]').addEventListener("click", () => {
       this.testConnection(win, html).catch(e => this.reportError(win, e, html));
+    });
+    html.querySelector('[data-action="new-chat"]').addEventListener("click", () => {
+      this.resetChat(win, html);
+    });
+    html.querySelector('[data-field="fontSize"]').addEventListener("change", () => {
+      try {
+        this.saveSettings(win, false, html);
+      } catch (e) {
+        this.reportError(win, e, html);
+      }
     });
     for (let refreshButton of html.querySelectorAll('[data-action="refresh-context"]')) {
       refreshButton.addEventListener("click", () => {
@@ -606,6 +672,7 @@ var DeepSeekAssistant = {
     }
 
     this.populateSettings(html);
+    this.applyFontSize(html);
     this.updateConfigStatus(html);
     this.toggleSettings(html, !this.getCharPref(this.prefs.apiKey, ""));
     return html;
@@ -615,6 +682,7 @@ var DeepSeekAssistant = {
     panel.querySelector('[data-field="apiKey"]').value = this.getCharPref(this.prefs.apiKey, "");
     panel.querySelector('[data-field="endpoint"]').value = this.getCharPref(this.prefs.endpoint, this.defaults.endpoint);
     panel.querySelector('[data-field="model"]').value = this.getCharPref(this.prefs.model, this.defaults.model);
+    panel.querySelector('[data-field="fontSize"]').value = this.getCharPref(this.prefs.fontSize, this.defaults.fontSize);
   },
 
   updateConfigStatus(panel) {
@@ -624,10 +692,58 @@ var DeepSeekAssistant = {
     }
     let hasKey = Boolean(this.getCharPref(this.prefs.apiKey, ""));
     let model = this.getCharPref(this.prefs.model, this.defaults.model);
-    status.textContent = hasKey
-      ? `DeepSeek 已配置，当前模型：${model}`
-      : "请先填写 DeepSeek API Key，然后就可以向当前文献提问。";
+    status.hidden = hasKey;
+    status.textContent = hasKey ? "" : "请先填写 DeepSeek API Key，然后就可以向当前文献提问。";
+    status.title = hasKey ? `DeepSeek 已配置，当前模型：${model}` : "";
     status.classList.toggle("zda-status-ready", hasKey);
+  },
+
+  applyFontSize(panel) {
+    let size = this.getCharPref(this.prefs.fontSize, this.defaults.fontSize);
+    if (!["small", "medium", "large"].includes(size)) {
+      size = this.defaults.fontSize;
+    }
+    panel.classList.remove("zda-font-small", "zda-font-medium", "zda-font-large");
+    panel.classList.add(`zda-font-${size}`);
+  },
+
+  resetChat(win, panel = this.getPanel(win)) {
+    if (!panel) {
+      return;
+    }
+    let chat = panel.querySelector('[data-role="chat"]');
+    chat.replaceChildren();
+    let doc = win.document;
+    let h = (tag, className, text = "") => {
+      let elem = doc.createElementNS("http://www.w3.org/1999/xhtml", tag);
+      if (className) {
+        elem.className = className;
+      }
+      if (text) {
+        elem.textContent = text;
+      }
+      return elem;
+    };
+    let card = (icon, title, text, extraClass = "") => {
+      let elem = h("div", `zda-empty-card${extraClass}`);
+      elem.append(h("div", "zda-card-icon", icon), h("strong", "", title), h("p", "", text));
+      return elem;
+    };
+    let empty = h("div", "zda-empty");
+    empty.setAttribute("data-role", "empty");
+    let grid = h("div", "zda-empty-grid");
+    grid.append(
+      card("⌁", "划线并提问", "选中论文任意段落后点击“问 AI”，让回答紧扣原文。"),
+      card("@", "加入文献上下文", "读取标题、摘要、批注和 Zotero 索引全文，再追问细节。"),
+      card("+", "继续研究", "让助手梳理贡献、局限、实验结果和可复现实验线索。", " zda-empty-wide")
+    );
+    empty.append(
+      h("div", "zda-empty-spark", "✦"),
+      grid,
+      h("div", "zda-empty-tip", "试着问：“第三节方法背后的直觉是什么？”")
+    );
+    chat.append(empty);
+    panel.querySelector('[data-field="question"]').value = "";
   },
 
   toggleSettings(panel, forceOpen = undefined) {
@@ -659,6 +775,7 @@ var DeepSeekAssistant = {
       throw new Error("当前 Zotero 视图中无法打开 AI4Zotero 面板。");
     }
     panel.hidden = false;
+    this.setContextButtonHidden(win, true);
     if (seed.context) {
       let contextField = panel.querySelector('[data-field="context"]');
       contextField.value = this.mergeContext(seed.context, contextField.value);
@@ -763,6 +880,7 @@ var DeepSeekAssistant = {
     }
     panel.closest("#ai4zotero-docked-host")?.removeAttribute("hidden");
     panel.hidden = false;
+    this.setContextButtonHidden(win, true);
     await this.refreshContextPreview(win, "", panel);
     return panel;
   },
@@ -827,10 +945,18 @@ var DeepSeekAssistant = {
     panel.hidden = true;
     panel.closest("#ai4zotero-docked-host")?.setAttribute("hidden", "true");
     panel.closest("#ai4zotero-reader-panel-box")?.setAttribute("hidden", "true");
+    this.setContextButtonHidden(win, false);
     let section = panel.closest("item-pane-custom-section");
     if (section) {
       section.open = false;
       section.removeAttribute("open");
+    }
+  },
+
+  setContextButtonHidden(win, hidden) {
+    let button = win?.document?.getElementById("ai4zotero-context-button");
+    if (button) {
+      button.hidden = hidden;
     }
   },
 
@@ -862,15 +988,21 @@ var DeepSeekAssistant = {
     let apiKey = panel.querySelector('[data-field="apiKey"]').value.trim();
     let endpoint = panel.querySelector('[data-field="endpoint"]').value.trim() || this.defaults.endpoint;
     let model = panel.querySelector('[data-field="model"]').value.trim() || this.defaults.model;
+    let fontSize = panel.querySelector('[data-field="fontSize"]')?.value || this.defaults.fontSize;
     if (!/^https?:\/\//i.test(endpoint)) {
       throw new Error("接口地址必须以 http:// 或 https:// 开头。");
     }
     this.setCharPref(this.prefs.apiKey, apiKey);
     this.setCharPref(this.prefs.endpoint, endpoint);
     this.setCharPref(this.prefs.model, model);
+    this.setCharPref(this.prefs.fontSize, fontSize);
+    this.applyFontSize(panel);
     this.updateConfigStatus(panel);
     if (announce) {
-      this.addMessage(win, "system", "设置已保存到 Zotero 本地偏好设置。", panel);
+      this.addMessage(win, "system", "设置已保存。DeepSeek 配置提醒已自动收起。", panel);
+      if (apiKey) {
+        this.toggleSettings(panel, false);
+      }
     }
     Zotero.debug(`AI4Zotero: settings saved (${apiKey ? "api key present" : "no api key"}, model ${model})`);
   },
@@ -1082,9 +1214,9 @@ var DeepSeekAssistant = {
 
     try {
       let answer = await this.callDeepSeek(payload, apiKey);
-      pending.textContent = answer;
+      this.setMessageContent(win, pending, answer, "assistant");
     } catch (e) {
-      pending.textContent = `请求失败：${e.message || e}`;
+      this.setMessageContent(win, pending, `请求失败：${e.message || e}`, "system");
     }
   },
 
@@ -1111,7 +1243,7 @@ var DeepSeekAssistant = {
       stream: false
     };
     let answer = await this.callDeepSeek(payload, apiKey);
-    pending.textContent = `连接成功。DeepSeek 返回：${answer}`;
+    this.setMessageContent(win, pending, `连接成功。DeepSeek 返回：${answer}`, "system");
   },
 
   async callDeepSeek(payload, apiKey) {
@@ -1157,10 +1289,119 @@ var DeepSeekAssistant = {
     chat.querySelector('[data-role="empty"]')?.remove();
     let message = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
     message.className = `zda-message zda-${role}`;
-    message.textContent = text;
+    this.setMessageContent(win, message, text, role);
     chat.appendChild(message);
     chat.scrollTop = chat.scrollHeight;
     return message;
+  },
+
+  setMessageContent(win, message, text, role) {
+    if (!message) {
+      return;
+    }
+    message.replaceChildren();
+    message.className = message.className
+      .replace(/\bzda-(user|assistant|system)\b/g, "")
+      .trim();
+    message.classList.add("zda-message", `zda-${role}`);
+    if (role === "assistant") {
+      message.classList.add("zda-markdown");
+      this.renderMarkdown(win, message, text);
+    } else {
+      message.classList.remove("zda-markdown");
+      message.textContent = text;
+    }
+  },
+
+  renderMarkdown(win, container, text) {
+    let doc = win.document;
+    let lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+    let paragraph = [];
+    let list = null;
+    let listType = "";
+
+    let flushParagraph = () => {
+      if (!paragraph.length) {
+        return;
+      }
+      let p = doc.createElementNS("http://www.w3.org/1999/xhtml", "p");
+      this.appendInlineMarkdown(doc, p, paragraph.join(" "));
+      container.append(p);
+      paragraph = [];
+    };
+    let flushList = () => {
+      if (list) {
+        container.append(list);
+        list = null;
+        listType = "";
+      }
+    };
+
+    for (let rawLine of lines) {
+      let line = rawLine.trim();
+      if (!line) {
+        flushParagraph();
+        flushList();
+        continue;
+      }
+
+      let heading = line.match(/^(#{1,4})\s+(.+)$/);
+      if (heading) {
+        flushParagraph();
+        flushList();
+        let level = Math.min(4, Math.max(3, heading[1].length + 2));
+        let h = doc.createElementNS("http://www.w3.org/1999/xhtml", `h${level}`);
+        this.appendInlineMarkdown(doc, h, heading[2]);
+        container.append(h);
+        continue;
+      }
+
+      let bullet = line.match(/^[-*]\s+(.+)$/);
+      let ordered = line.match(/^\d+[.)]\s+(.+)$/);
+      if (bullet || ordered) {
+        flushParagraph();
+        let nextType = bullet ? "ul" : "ol";
+        if (!list || listType !== nextType) {
+          flushList();
+          list = doc.createElementNS("http://www.w3.org/1999/xhtml", nextType);
+          listType = nextType;
+        }
+        let li = doc.createElementNS("http://www.w3.org/1999/xhtml", "li");
+        this.appendInlineMarkdown(doc, li, bullet ? bullet[1] : ordered[1]);
+        list.append(li);
+        continue;
+      }
+
+      paragraph.push(line);
+    }
+
+    flushParagraph();
+    flushList();
+  },
+
+  appendInlineMarkdown(doc, parent, text) {
+    let pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+    let index = 0;
+    let value = String(text || "");
+    for (let match of value.matchAll(pattern)) {
+      if (match.index > index) {
+        parent.append(doc.createTextNode(value.slice(index, match.index)));
+      }
+      let token = match[0];
+      if (token.startsWith("**")) {
+        let strong = doc.createElementNS("http://www.w3.org/1999/xhtml", "strong");
+        strong.textContent = token.slice(2, -2);
+        parent.append(strong);
+      } else {
+        let code = doc.createElementNS("http://www.w3.org/1999/xhtml", "code");
+        code.textContent = token.slice(1, -1);
+        parent.append(code);
+      }
+      index = match.index + token.length;
+    }
+    if (index < value.length) {
+      parent.append(doc.createTextNode(value.slice(index)));
+    }
   },
 
   reportError(win, error, panel = this.getPanel(win)) {
