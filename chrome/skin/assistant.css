@@ -101,6 +101,10 @@
   box-shadow: 0 12px 28px rgba(16, 24, 40, .22);
 }
 
+#ai4zotero-context-button[hidden] {
+  display: none;
+}
+
 .ai4zotero-context-button-icon {
   display: block;
   width: 36px;
@@ -148,15 +152,12 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 }
 
 .zda-topbar,
-.zda-context-head,
-.zda-context-actions,
 .zda-top-actions,
 .zda-settings-actions,
 .zda-composer,
 .zda-sessionbar,
 .zda-composer-footer,
 .zda-mode-chips,
-.zda-context-foot,
 .zda-attachments,
 .zda-message-actions,
 .zda-message-attachments {
@@ -310,8 +311,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   background: color-mix(in srgb, var(--accent-green, #39bf68) 12%, var(--material-background, #fff));
 }
 
-.zda-settings,
-.zda-context {
+.zda-settings {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -339,7 +339,6 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 .zda-settings input,
 .zda-settings select,
 .zda-mode-select,
-.zda-context textarea,
 .zda-composer textarea {
   box-sizing: border-box;
   width: 100%;
@@ -371,34 +370,10 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   padding: 4px 0;
 }
 
-.zda-context-head {
-  justify-content: space-between;
-}
-
-.zda-context textarea {
-  min-height: 96px;
-  max-height: 142px;
-  padding: 8px;
-  resize: vertical;
-  font-size: var(--zda-composer-font-size);
-  line-height: 1.5;
-}
-
-.zda-context-foot {
-  justify-content: space-between;
-  min-height: 18px;
-}
-
-.zda-context-state {
-  color: var(--fill-secondary, #71717a);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
 .zda-chat {
   flex: 1;
-  min-height: 160px;
-  max-height: 420px;
+  min-height: 260px;
+  max-height: 620px;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -654,7 +629,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 
 .zda-prompt-strip button,
 .zda-settings-actions button,
-.zda-context-actions button {
+.zda-sessionbar button {
   border-radius: 6px;
   min-height: 26px;
   padding: 3px 10px;
