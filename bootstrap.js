@@ -1631,6 +1631,8 @@ var DeepSeekAssistant = {
     let paragraph = [];
     let list = null;
     let listType = "";
+    let codeFence = null;
+    let codeLines = [];
 
     let flushParagraph = () => {
       if (!paragraph.length) {
@@ -1648,12 +1650,58 @@ var DeepSeekAssistant = {
         listType = "";
       }
     };
+    let flushCode = () => {
+      if (!codeFence) {
+        return;
+      }
+      this.appendMarkdownCodeBlock(doc, container, codeLines.join("\n"), codeFence);
+      codeFence = null;
+      codeLines = [];
+    };
 
-    for (let rawLine of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      let rawLine = lines[i];
       let line = rawLine.trim();
+      let fence = line.match(/^```([\w-]*)\s*$/);
+      if (fence) {
+        if (codeFence) {
+          flushCode();
+        } else {
+          flushParagraph();
+          flushList();
+          codeFence = fence[1] || "";
+          codeLines = [];
+        }
+        continue;
+      }
+      if (codeFence) {
+        codeLines.push(rawLine);
+        continue;
+      }
+
       if (!line) {
         flushParagraph();
         flushList();
+        continue;
+      }
+
+      let inlineDisplayMath = line.match(/^\$\$(.+)\$\$$/);
+      if (inlineDisplayMath) {
+        flushParagraph();
+        flushList();
+        this.appendMarkdownMathBlock(doc, container, inlineDisplayMath[1]);
+        continue;
+      }
+      if (line === "$$") {
+        flushParagraph();
+        flushList();
+        let mathLines = [];
+        i++;
+        while (i < lines.length && lines[i].trim() !== "$$") {
+          mathLines.push(lines[i]);
+          i++;
+        }
+        this.appendMarkdownMathBlock(doc, container, mathLines.join("\n"));
         continue;
       }
 
@@ -1661,6 +1709,44 @@ var DeepSeekAssistant = {
         flushParagraph();
         flushList();
         container.append(doc.createElementNS("http://www.w3.org/1999/xhtml", "hr"));
+        continue;
+      }
+
+      if (this.isMarkdownTableRow(line) && this.isMarkdownTableSeparator(lines[i + 1]?.trim())) {
+        flushParagraph();
+        flushList();
+        let headers = this.splitMarkdownTableRow(line);
+        let aligns = this.splitMarkdownTableRow(lines[i + 1].trim()).map(cell => {
+          let value = cell.trim();
+          if (/^:-+:$/.test(value)) {
+            return "center";
+          }
+          if (/^-+:$/.test(value)) {
+            return "right";
+          }
+          if (/^:-+$/.test(value)) {
+            return "left";
+          }
+          return "";
+        });
+        let rows = [];
+        i += 2;
+        while (i < lines.length && this.isMarkdownTableRow(lines[i].trim())) {
+          rows.push(this.splitMarkdownTableRow(lines[i].trim()));
+          i++;
+        }
+        i--;
+        this.appendMarkdownTable(doc, container, headers, aligns, rows);
+        continue;
+      }
+
+      let quote = line.match(/^>\s?(.+)$/);
+      if (quote) {
+        flushParagraph();
+        flushList();
+        let blockquote = doc.createElementNS("http://www.w3.org/1999/xhtml", "blockquote");
+        this.appendInlineMarkdown(doc, blockquote, quote[1]);
+        container.append(blockquote);
         continue;
       }
 
@@ -1696,10 +1782,11 @@ var DeepSeekAssistant = {
 
     flushParagraph();
     flushList();
+    flushCode();
   },
 
   appendInlineMarkdown(doc, parent, text) {
-    let pattern = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+    let pattern = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^)]+\)|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$[^$\n]+\$)/g;
     let index = 0;
     let value = String(text || "");
     for (let match of value.matchAll(pattern)) {
@@ -1711,16 +1798,167 @@ var DeepSeekAssistant = {
         let strong = doc.createElementNS("http://www.w3.org/1999/xhtml", "strong");
         strong.textContent = token.slice(2, -2);
         parent.append(strong);
-      } else {
+      } else if (token.startsWith("`")) {
         let code = doc.createElementNS("http://www.w3.org/1999/xhtml", "code");
         code.textContent = token.slice(1, -1);
         parent.append(code);
+      } else if (token.startsWith("[")) {
+        let link = token.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+        let a = doc.createElementNS("http://www.w3.org/1999/xhtml", "a");
+        a.textContent = link?.[1] || token;
+        a.href = this.sanitizeMarkdownHref(link?.[2] || "");
+        a.target = "_blank";
+        a.rel = "noreferrer";
+        parent.append(a);
+      } else {
+        let math = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        math.className = "zda-math";
+        math.textContent = this.normalizeLatexMath(token);
+        parent.append(math);
       }
       index = match.index + token.length;
     }
     if (index < value.length) {
       parent.append(doc.createTextNode(value.slice(index)));
     }
+  },
+
+  isMarkdownTableRow(line) {
+    return Boolean(line && line.includes("|") && !/^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line));
+  },
+
+  isMarkdownTableSeparator(line) {
+    return Boolean(line && /^\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?$/.test(line));
+  },
+
+  splitMarkdownTableRow(line) {
+    let value = String(line || "").trim();
+    if (value.startsWith("|")) {
+      value = value.slice(1);
+    }
+    if (value.endsWith("|")) {
+      value = value.slice(0, -1);
+    }
+    let cells = [];
+    let current = "";
+    let escaped = false;
+    for (let char of value) {
+      if (escaped) {
+        current += char;
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "|") {
+        cells.push(current.trim());
+        current = "";
+      } else {
+        current += char;
+      }
+    }
+    if (escaped) {
+      current += "\\";
+    }
+    cells.push(current.trim());
+    return cells;
+  },
+
+  sanitizeMarkdownHref(href) {
+    let value = String(href || "").trim();
+    return /^(https?:|mailto:|doi:|zotero:)/i.test(value) ? value : "#";
+  },
+
+  appendMarkdownTable(doc, container, headers, aligns, rows) {
+    let wrap = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    wrap.className = "zda-table-wrap";
+    let table = doc.createElementNS("http://www.w3.org/1999/xhtml", "table");
+    let thead = doc.createElementNS("http://www.w3.org/1999/xhtml", "thead");
+    let headRow = doc.createElementNS("http://www.w3.org/1999/xhtml", "tr");
+    headers.forEach((header, index) => {
+      let th = doc.createElementNS("http://www.w3.org/1999/xhtml", "th");
+      if (aligns[index]) {
+        th.style.textAlign = aligns[index];
+      }
+      this.appendInlineMarkdown(doc, th, header);
+      headRow.append(th);
+    });
+    thead.append(headRow);
+    table.append(thead);
+    let tbody = doc.createElementNS("http://www.w3.org/1999/xhtml", "tbody");
+    for (let row of rows) {
+      let tr = doc.createElementNS("http://www.w3.org/1999/xhtml", "tr");
+      for (let index = 0; index < headers.length; index++) {
+        let td = doc.createElementNS("http://www.w3.org/1999/xhtml", "td");
+        if (aligns[index]) {
+          td.style.textAlign = aligns[index];
+        }
+        this.appendInlineMarkdown(doc, td, row[index] || "");
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+    table.append(tbody);
+    wrap.append(table);
+    container.append(wrap);
+  },
+
+  appendMarkdownCodeBlock(doc, container, codeText, language = "") {
+    let pre = doc.createElementNS("http://www.w3.org/1999/xhtml", "pre");
+    let code = doc.createElementNS("http://www.w3.org/1999/xhtml", "code");
+    if (language) {
+      code.dataset.language = language;
+    }
+    code.textContent = codeText;
+    pre.append(code);
+    container.append(pre);
+  },
+
+  appendMarkdownMathBlock(doc, container, mathText) {
+    let block = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    block.className = "zda-math-block";
+    block.textContent = this.normalizeLatexMath(mathText);
+    container.append(block);
+  },
+
+  normalizeLatexMath(token) {
+    let value = String(token || "")
+      .replace(/^\\\(|\\\)$/g, "")
+      .replace(/^\\\[|\\\]$/g, "")
+      .replace(/^\$\$|\$\$$/g, "")
+      .replace(/^\$|\$$/g, "")
+      .trim();
+    let commandMap = {
+      "\\cdot": "·",
+      "\\times": "×",
+      "\\rightarrow": "→",
+      "\\leftarrow": "←",
+      "\\leq": "≤",
+      "\\geq": "≥",
+      "\\neq": "≠",
+      "\\approx": "≈",
+      "\\sim": "∼",
+      "\\infty": "∞",
+      "\\alpha": "α",
+      "\\beta": "β",
+      "\\gamma": "γ",
+      "\\delta": "δ",
+      "\\lambda": "λ",
+      "\\theta": "θ",
+      "\\mu": "μ",
+      "\\sigma": "σ",
+      "\\pi": "π"
+    };
+    value = value.replace(/\\(?:text|mathrm|mathbf|operatorname)\{([^{}]*)\}/g, "$1");
+    for (let [command, replacement] of Object.entries(commandMap)) {
+      value = value.split(command).join(replacement);
+    }
+    value = value
+      .replace(/\\([a-zA-Z]+)/g, "$1")
+      .replace(/\^\{([^{}]+)\}/g, "^$1")
+      .replace(/_\{([^{}]+)\}/g, "_$1")
+      .replace(/[{}]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return value || token;
   },
 
   reportError(win, error, panel = this.getPanel(win)) {

@@ -670,7 +670,10 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 
 .zda-markdown p:last-child,
 .zda-markdown ul:last-child,
-.zda-markdown ol:last-child {
+.zda-markdown ol:last-child,
+.zda-markdown blockquote:last-child,
+.zda-markdown pre:last-child,
+.zda-markdown .zda-table-wrap:last-child {
   margin-bottom: 0;
 }
 
@@ -704,6 +707,84 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   border: 0;
   margin: 16px 0;
   background: color-mix(in srgb, var(--zda-border) 84%, transparent);
+}
+
+.zda-markdown blockquote {
+  margin: 12px 0;
+  border-inline-start: 3px solid color-mix(in srgb, var(--zda-accent) 58%, transparent);
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--zda-panel) 70%, transparent);
+  color: var(--fill-secondary, #4b5563);
+}
+
+.zda-markdown pre {
+  overflow: auto;
+  margin: 12px 0;
+  border: 1px solid var(--zda-border);
+  border-radius: 7px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--material-background, #fff) 80%, #eef1f5);
+}
+
+.zda-markdown pre code {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  white-space: pre;
+}
+
+.zda-table-wrap {
+  max-width: 100%;
+  overflow: auto;
+  margin: 12px 0;
+  border: 1px solid var(--zda-border);
+  border-radius: 7px;
+}
+
+.zda-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: calc(var(--zda-chat-font-size) - 1px);
+}
+
+.zda-markdown th,
+.zda-markdown td {
+  border-bottom: 1px solid var(--zda-border);
+  padding: 7px 9px;
+  text-align: start;
+  vertical-align: top;
+}
+
+.zda-markdown th {
+  background: color-mix(in srgb, var(--zda-panel) 82%, transparent);
+  font-weight: 700;
+}
+
+.zda-markdown tr:last-child td {
+  border-bottom: 0;
+}
+
+.zda-markdown a {
+  color: var(--accent-blue, #2563eb);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.zda-math-block {
+  overflow: auto;
+  margin: 12px 0;
+  border-inline-start: 3px solid color-mix(in srgb, var(--zda-accent) 45%, transparent);
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--zda-panel) 76%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.zda-math {
+  border-radius: 4px;
+  padding: 0 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
 }
 
 .zda-markdown code {
