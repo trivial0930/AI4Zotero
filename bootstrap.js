@@ -1657,6 +1657,13 @@ var DeepSeekAssistant = {
         continue;
       }
 
+      if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(line)) {
+        flushParagraph();
+        flushList();
+        container.append(doc.createElementNS("http://www.w3.org/1999/xhtml", "hr"));
+        continue;
+      }
+
       let heading = line.match(/^(#{1,4})\s+(.+)$/);
       if (heading) {
         flushParagraph();

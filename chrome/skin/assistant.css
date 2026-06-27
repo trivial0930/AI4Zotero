@@ -699,6 +699,13 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   margin: 6px 0;
 }
 
+.zda-markdown hr {
+  height: 1px;
+  border: 0;
+  margin: 16px 0;
+  background: color-mix(in srgb, var(--zda-border) 84%, transparent);
+}
+
 .zda-markdown code {
   border: 1px solid var(--zda-border);
   border-radius: 4px;

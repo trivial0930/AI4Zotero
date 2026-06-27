@@ -3,9 +3,9 @@
     "ai4zotero@trivial0930.github.io": {
       "updates": [
         {
-          "version": "1.3.3",
+          "version": "1.3.4",
           "update_link": "https://github.com/trivial0930/AI4Zotero/raw/main/dist/ai4zotero.xpi",
-          "update_hash": "sha256:737dc4fa16b2c31a26ee4babfd74f59c34ebfd62ccbd38756d70fe5f2170da65",
+          "update_hash": "sha256:1bdad17cb4d8586c13553266868e56eee285945532ebf4d309c3cf73c62be96b",
           "applications": {
             "zotero": {
               "strict_min_version": "9.0",
