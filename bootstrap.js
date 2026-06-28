@@ -1452,10 +1452,14 @@ var DeepSeekAssistant = {
   readHistoryStore() {
     try {
       let raw = this.getCharPref(this.prefs.history, "{}");
+      if (raw.startsWith("v1:")) {
+        raw = decodeURIComponent(raw.slice(3));
+      }
       let parsed = JSON.parse(raw || "{}");
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     } catch (e) {
       Zotero.debug(`AI4Zotero: failed reading history: ${e}`);
+      this.setCharPref(this.prefs.history, "v1:%7B%7D");
       return {};
     }
   },
@@ -1471,7 +1475,7 @@ var DeepSeekAssistant = {
         entries.pop();
         json = JSON.stringify(Object.fromEntries(entries));
       }
-      this.setCharPref(this.prefs.history, json);
+      this.setCharPref(this.prefs.history, `v1:${encodeURIComponent(json)}`);
     } catch (e) {
       Zotero.debug(`AI4Zotero: failed writing history: ${e}`);
     }
@@ -1565,24 +1569,29 @@ var DeepSeekAssistant = {
   buildChatPayload(question, context, attachments = []) {
     let reasoningEffort = this.getCharPref(this.prefs.reasoningEffort, this.defaults.reasoningEffort);
     let languageStyle = this.getCharPref(this.prefs.languageStyle, this.defaults.languageStyle);
+    let endpoint = this.getCharPref(this.prefs.endpoint, this.defaults.endpoint);
+    let model = this.getCharPref(this.prefs.model, this.defaults.model);
+    let supportsImages = this.supportsImageInput(endpoint, model);
     let systemPrompt = [
       this.getCharPref(this.prefs.systemPrompt, this.defaults.systemPrompt),
       this.getLanguageStyleInstruction(languageStyle),
       this.getReasoningInstruction(reasoningEffort)
     ].filter(Boolean).join("\n");
-    let attachmentText = this.describeAttachmentsForText(attachments);
+    let attachmentText = this.describeAttachmentsForText(attachments, { imagesSent: supportsImages });
     let userText =
       `论文上下文：\n${context || "（当前没有可用上下文）"}\n\n` +
       `${attachmentText ? `用户补充材料：\n${attachmentText}\n\n` : ""}` +
       `问题：\n${question}`;
-    let userContent = [{ type: "text", text: userText }];
-    for (let attachment of attachments) {
-      if (attachment.kind === "image" && attachment.dataURL) {
-        userContent.push({ type: "image_url", image_url: { url: attachment.dataURL } });
+    let userContent = supportsImages ? [{ type: "text", text: userText }] : userText;
+    if (supportsImages) {
+      for (let attachment of attachments) {
+        if (attachment.kind === "image" && attachment.dataURL) {
+          userContent.push({ type: "image_url", image_url: { url: attachment.dataURL } });
+        }
       }
     }
     let payload = {
-      model: this.getCharPref(this.prefs.model, this.defaults.model),
+      model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userContent }
@@ -1591,6 +1600,19 @@ var DeepSeekAssistant = {
       stream: false
     };
     return payload;
+  },
+
+  supportsImageInput(endpoint = "", model = "") {
+    let endpointValue = String(endpoint || "").toLowerCase();
+    let modelValue = String(model || "").toLowerCase();
+    if (endpointValue.includes("api.deepseek.com")) {
+      return false;
+    }
+    if (/(gpt-4o|gpt-4\.1|o3|o4|vision|qwen-vl|glm-4v|gemini|claude-3)/i.test(modelValue)) {
+      return true;
+    }
+    return /(openai\.com|generativelanguage\.googleapis\.com|dashscope|bigmodel|siliconflow)/i.test(endpointValue)
+      && /(vision|vl|4o|4\.1|gemini|glm-4v)/i.test(modelValue);
   },
 
   getLanguageStyleInstruction(style) {
@@ -1616,7 +1638,7 @@ var DeepSeekAssistant = {
     return style === "teacher" ? 0.35 : 0.2;
   },
 
-  describeAttachmentsForText(attachments = []) {
+  describeAttachmentsForText(attachments = [], options = {}) {
     if (!attachments.length) {
       return "";
     }
@@ -1625,7 +1647,9 @@ var DeepSeekAssistant = {
         return `文件：${attachment.name}\n${attachment.text.slice(0, 4000)}`;
       }
       if (attachment.kind === "image") {
-        return `图片：${attachment.name}（已作为多模态图片输入附加）`;
+        return options.imagesSent
+          ? `图片：${attachment.name}（已作为多模态图片输入附加）`
+          : `图片：${attachment.name}（当前接口不支持直接读取图片内容，仅保留文件名作为上下文；请在问题中描述图片重点，或切换到支持 vision 的 OpenAI-compatible 模型）`;
       }
       return `文件：${attachment.name}（${attachment.type || "未知类型"}，当前仅作为文件名上下文）`;
     }).join("\n\n");
@@ -1648,7 +1672,7 @@ var DeepSeekAssistant = {
       model: this.getCharPref(this.prefs.model, this.defaults.model),
       messages: [
         { role: "system", content: "请只回复：OK" },
-        { role: "user", content: [{ type: "text", text: "连接测试" }] }
+        { role: "user", content: "连接测试" }
       ],
       temperature: 0,
       stream: false
