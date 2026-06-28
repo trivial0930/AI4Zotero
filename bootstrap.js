@@ -1542,7 +1542,17 @@ var DeepSeekAssistant = {
       let chip = win.document.createElementNS("http://www.w3.org/1999/xhtml", "button");
       chip.type = "button";
       chip.className = "zda-attachment-chip";
-      chip.textContent = `${attachment.kind === "image" ? "图片" : "文件"} · ${attachment.name}`;
+      if (attachment.kind === "image" && attachment.dataURL) {
+        chip.classList.add("zda-attachment-image");
+        let thumb = win.document.createElementNS("http://www.w3.org/1999/xhtml", "img");
+        thumb.src = attachment.dataURL;
+        thumb.alt = "";
+        let label = win.document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        label.textContent = attachment.name;
+        chip.append(thumb, label);
+      } else {
+        chip.textContent = `${attachment.kind === "image" ? "图片" : "文件"} · ${attachment.name}`;
+      }
       chip.title = "点击移除此附件";
       chip.addEventListener("click", () => {
         panel._ai4zoteroAttachments = (panel._ai4zoteroAttachments || [])
@@ -1635,11 +1645,25 @@ var DeepSeekAssistant = {
 
   appendThinkingBar(win, message, options = {}) {
     let bar = win.document.createElementNS("http://www.w3.org/1999/xhtml", "details");
-    bar.className = "zda-thinking";
+    bar.className = options.pending ? "zda-thinking zda-thinking-pending" : "zda-thinking";
     bar.open = Boolean(options.pending);
     let summary = win.document.createElementNS("http://www.w3.org/1999/xhtml", "summary");
     let effort = ({ fast: "快速", balanced: "均衡", deep: "深入" })[options.reasoningEffort] || "均衡";
-    summary.textContent = options.pending ? `Thinking... · ${effort}` : "Thinking Finished";
+    let indicator = win.document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+    indicator.className = "zda-thinking-indicator";
+    let label = win.document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+    label.textContent = options.pending ? `Thinking · ${effort}` : "Thinking Finished";
+    summary.append(indicator, label);
+    if (options.pending) {
+      let dots = win.document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      dots.className = "zda-thinking-dots";
+      dots.append(
+        win.document.createElementNS("http://www.w3.org/1999/xhtml", "i"),
+        win.document.createElementNS("http://www.w3.org/1999/xhtml", "i"),
+        win.document.createElementNS("http://www.w3.org/1999/xhtml", "i")
+      );
+      summary.append(dots);
+    }
     let body = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
     body.textContent = options.pending ? "正在结合当前文献、划线和补充材料组织回答。" : "已完成阅读与组织。";
     bar.append(summary, body);
@@ -1671,7 +1695,17 @@ var DeepSeekAssistant = {
     wrap.className = "zda-message-attachments";
     for (let attachment of attachments) {
       let chip = win.document.createElementNS("http://www.w3.org/1999/xhtml", "span");
-      chip.textContent = `${attachment.kind === "image" ? "图片" : "文件"} · ${attachment.name}`;
+      if (attachment.kind === "image" && attachment.dataURL) {
+        chip.className = "zda-message-attachment-image";
+        let thumb = win.document.createElementNS("http://www.w3.org/1999/xhtml", "img");
+        thumb.src = attachment.dataURL;
+        thumb.alt = "";
+        let label = win.document.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        label.textContent = attachment.name;
+        chip.append(thumb, label);
+      } else {
+        chip.textContent = `${attachment.kind === "image" ? "图片" : "文件"} · ${attachment.name}`;
+      }
       wrap.append(chip);
     }
     message.append(wrap);
@@ -1978,6 +2012,7 @@ var DeepSeekAssistant = {
       .replace(/^\$\$|\$\$$/g, "")
       .replace(/^\$|\$$/g, "")
       .trim();
+    value = this.replaceLatexFractions(value);
     let commandMap = {
       "\\cdot": "·",
       "\\times": "×",
@@ -1995,11 +2030,26 @@ var DeepSeekAssistant = {
       "\\delta": "δ",
       "\\lambda": "λ",
       "\\theta": "θ",
+      "\\eta": "η",
+      "\\rho": "ρ",
+      "\\tau": "τ",
       "\\mu": "μ",
       "\\sigma": "σ",
-      "\\pi": "π"
+      "\\phi": "φ",
+      "\\omega": "ω",
+      "\\pi": "π",
+      "\\top": "T",
+      "\\|": "‖"
     };
-    value = value.replace(/\\(?:text|mathrm|mathbf|operatorname)\{([^{}]*)\}/g, "$1");
+    value = value
+      .replace(/\\left\s*/g, "")
+      .replace(/\\right\s*/g, "")
+      .replace(/\\(?:text|mathrm|mathbf|operatorname|mathcal)\{([^{}]*)\}/g, "$1")
+      .replace(/\\exp\b/g, "exp")
+      .replace(/\\log\b/g, "log")
+      .replace(/\\softmax\b/g, "softmax")
+      .replace(/\\sum_\{([^{}]+)\}\^\{([^{}]+)\}/g, "Σ_{$1}^{$2}")
+      .replace(/\\sum_([^\s^]+)\^([^\s]+)/g, "Σ_$1^$2");
     for (let [command, replacement] of Object.entries(commandMap)) {
       value = value.split(command).join(replacement);
     }
@@ -2011,6 +2061,65 @@ var DeepSeekAssistant = {
       .replace(/\s+/g, " ")
       .trim();
     return value || token;
+  },
+
+  replaceLatexFractions(value) {
+    let input = String(value || "");
+    let output = "";
+    let index = 0;
+    while (index < input.length) {
+      let fracIndex = input.indexOf("\\frac", index);
+      if (fracIndex < 0) {
+        output += input.slice(index);
+        break;
+      }
+      output += input.slice(index, fracIndex);
+      let numerator = this.readLatexGroup(input, fracIndex + 5);
+      if (!numerator) {
+        output += "\\frac";
+        index = fracIndex + 5;
+        continue;
+      }
+      let denominator = this.readLatexGroup(input, numerator.end);
+      if (!denominator) {
+        output += `(${numerator.value})`;
+        index = numerator.end;
+        continue;
+      }
+      output += `(${this.replaceLatexFractions(numerator.value)}) / (${this.replaceLatexFractions(denominator.value)})`;
+      index = denominator.end;
+    }
+    return output;
+  },
+
+  readLatexGroup(input, start) {
+    let index = start;
+    while (/\s/.test(input[index] || "")) {
+      index++;
+    }
+    if (input[index] !== "{") {
+      return null;
+    }
+    let depth = 0;
+    let value = "";
+    for (let i = index; i < input.length; i++) {
+      let char = input[i];
+      if (char === "{") {
+        if (depth > 0) {
+          value += char;
+        }
+        depth++;
+      } else if (char === "}") {
+        depth--;
+        if (depth === 0) {
+          return { value, end: i + 1 };
+        }
+        value += char;
+      } else {
+        value += char;
+      }
+    }
+    return null;
   },
 
   reportError(win, error, panel = this.getPanel(win)) {

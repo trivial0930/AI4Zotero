@@ -486,13 +486,31 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 }
 
 .zda-thinking {
+  position: relative;
+  overflow: hidden;
   margin: 8px 0 14px;
+  border: 1px solid color-mix(in srgb, var(--zda-accent) 14%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--material-sidepane, #f7f7f8) 88%, #f3f3f3);
   color: var(--zda-accent);
 }
 
+.zda-thinking-pending::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 0%, color-mix(in srgb, var(--zda-accent) 12%, transparent) 42%, transparent 70%);
+  transform: translateX(-100%);
+  animation: zda-thinking-sweep 1.6s ease-in-out infinite;
+  pointer-events: none;
+}
+
 .zda-thinking summary {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
   padding: 10px 12px;
   font-weight: 700;
@@ -504,10 +522,81 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
 }
 
 .zda-thinking div {
+  position: relative;
+  z-index: 1;
   border-top: 1px solid var(--zda-border);
   padding: 8px 12px 10px;
   color: var(--fill-secondary, #71717a);
   font-size: 12px;
+}
+
+.zda-thinking-indicator {
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.zda-thinking-pending .zda-thinking-indicator {
+  border-color: color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  animation: zda-thinking-spin .9s linear infinite;
+}
+
+.zda-thinking:not(.zda-thinking-pending) .zda-thinking-indicator::after {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 8px;
+  margin: 1px 0 0 4px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.zda-thinking-dots {
+  display: inline-flex;
+  gap: 3px;
+  margin-inline-start: auto;
+}
+
+.zda-thinking-dots i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: zda-thinking-dot 1s ease-in-out infinite;
+}
+
+.zda-thinking-dots i:nth-child(2) {
+  animation-delay: .14s;
+}
+
+.zda-thinking-dots i:nth-child(3) {
+  animation-delay: .28s;
+}
+
+@keyframes zda-thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes zda-thinking-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes zda-thinking-dot {
+  0%, 80%, 100% {
+    transform: translateY(0);
+    opacity: .42;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
 }
 
 .zda-message-actions {
@@ -531,7 +620,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   margin-top: 8px;
 }
 
-.zda-message-attachments span,
+.zda-message-attachments > span,
 .zda-attachment-chip {
   border: 1px solid var(--zda-border);
   border-radius: 999px;
@@ -539,6 +628,35 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   background: color-mix(in srgb, var(--material-background, #fff) 94%, #f6f6f6);
   color: var(--fill-secondary, #71717a);
   font-size: 12px;
+}
+
+.zda-message-attachment-image,
+.zda-attachment-chip.zda-attachment-image {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 190px;
+  border-radius: 10px;
+  padding: 4px 8px 4px 4px;
+}
+
+.zda-message-attachment-image img,
+.zda-attachment-chip.zda-attachment-image img {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 7px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--material-background, #fff) 70%, #d7dce3);
+}
+
+.zda-message-attachment-image span,
+.zda-attachment-chip.zda-attachment-image span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--fill-secondary, #71717a);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .zda-composer {
@@ -777,6 +895,7 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   padding: 8px 10px;
   background: color-mix(in srgb, var(--zda-panel) 76%, transparent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.65;
   white-space: pre-wrap;
 }
 
