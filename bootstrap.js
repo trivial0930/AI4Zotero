@@ -616,7 +616,7 @@ var DeepSeekAssistant = {
       h("form", { className: "zda-composer", "data-role": "composer" }, [
         h("textarea", {
           "data-field": "question",
-          placeholder: "询问这篇论文，或解释当前划线内容...",
+          placeholder: "询问这篇论文，或粘贴图片/文件后提问...",
           rows: "3"
         }),
         h("input", {
@@ -698,6 +698,15 @@ var DeepSeekAssistant = {
       this.addFilesToPanel(win, html, Array.from(event.currentTarget.files || []))
         .catch(e => this.reportError(win, e, html));
       event.currentTarget.value = "";
+    });
+    html.querySelector('[data-field="question"]').addEventListener("paste", event => {
+      this.handlePasteAttachments(win, html, event).catch(e => this.reportError(win, e, html));
+    });
+    html.addEventListener("paste", event => {
+      if (event.target?.closest?.("input, textarea, select")) {
+        return;
+      }
+      this.handlePasteAttachments(win, html, event).catch(e => this.reportError(win, e, html));
     });
     html.querySelector('[data-field="question"]').addEventListener("keydown", event => {
       if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) {
@@ -1429,14 +1438,45 @@ var DeepSeekAssistant = {
     this.renderAttachmentList(win, panel);
   },
 
+  async handlePasteAttachments(win, panel, event) {
+    let files = this.getFilesFromClipboardEvent(event);
+    if (!files.length) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    await this.addFilesToPanel(win, panel, files);
+  },
+
+  getFilesFromClipboardEvent(event) {
+    let clipboard = event.clipboardData;
+    if (!clipboard) {
+      return [];
+    }
+    let files = [];
+    for (let item of Array.from(clipboard.items || [])) {
+      if (item.kind === "file") {
+        let file = item.getAsFile?.();
+        if (file) {
+          files.push(file);
+        }
+      }
+    }
+    if (!files.length) {
+      files = Array.from(clipboard.files || []);
+    }
+    return files.filter(file => file && (file.size > 0 || /^image\//i.test(file.type || "")));
+  },
+
   async readAttachmentFile(win, file) {
     let isImage = /^image\//i.test(file.type || "");
     let isText = /^(text\/|application\/json)/i.test(file.type || "") || /\.(txt|md|csv|json)$/i.test(file.name || "");
+    let name = this.getAttachmentFileName(file, isImage ? "粘贴图片" : "粘贴文件");
     if (isImage) {
       return {
         id: `${Date.now()}-${Math.random()}`,
         kind: "image",
-        name: file.name,
+        name,
         type: file.type,
         size: file.size,
         dataURL: await this.readFileAsDataURL(win, file)
@@ -1446,7 +1486,7 @@ var DeepSeekAssistant = {
       return {
         id: `${Date.now()}-${Math.random()}`,
         kind: "text",
-        name: file.name,
+        name,
         type: file.type,
         size: file.size,
         text: await this.readFileAsText(win, file)
@@ -1455,10 +1495,22 @@ var DeepSeekAssistant = {
     return {
       id: `${Date.now()}-${Math.random()}`,
       kind: "file",
-      name: file.name,
+      name,
       type: file.type,
       size: file.size
     };
+  },
+
+  getAttachmentFileName(file, fallback) {
+    let name = String(file?.name || "").trim();
+    if (name) {
+      return name;
+    }
+    let extension = "";
+    if (file?.type) {
+      extension = ({ "image/png": ".png", "image/jpeg": ".jpg", "image/gif": ".gif", "image/webp": ".webp" })[file.type] || "";
+    }
+    return `${fallback}${extension}`;
   },
 
   readFileAsDataURL(win, file) {
