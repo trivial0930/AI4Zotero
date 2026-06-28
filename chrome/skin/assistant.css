@@ -308,6 +308,69 @@ item-pane-custom-section[data-pane*="ai4zotero"] [data-type="body"] {
   font-weight: 650 !important;
 }
 
+.zda-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--zda-border);
+  border-radius: 8px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--material-background, #fff) 96%, #f4f5f7);
+}
+
+.zda-history[hidden] {
+  display: none;
+}
+
+.zda-history-title {
+  color: var(--fill-secondary, #5d6673);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.zda-history-empty {
+  color: var(--fill-secondary, #71717a);
+  font-size: 12px;
+}
+
+.zda-history-item {
+  display: flex !important;
+  flex-direction: column;
+  align-items: stretch !important;
+  gap: 2px;
+  min-height: 42px !important;
+  border: 1px solid var(--zda-border) !important;
+  border-radius: 7px !important;
+  padding: 6px 8px !important;
+  background: color-mix(in srgb, var(--material-button, #fff) 94%, transparent) !important;
+  text-align: start;
+}
+
+.zda-history-item.zda-active {
+  border-color: color-mix(in srgb, var(--zda-accent) 48%, transparent) !important;
+  background: color-mix(in srgb, var(--zda-accent) 8%, var(--material-button, #fff)) !important;
+}
+
+.zda-history-item strong,
+.zda-history-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.zda-history-item strong {
+  color: var(--fill-primary, #202124);
+  font-size: 12px;
+}
+
+.zda-history-item span {
+  color: var(--fill-secondary, #71717a);
+  font-size: 11px;
+}
+
 .zda-status {
   border: 1px solid color-mix(in srgb, var(--accent-gold, #cc9200) 36%, transparent);
   border-radius: 6px;

@@ -21,7 +21,8 @@ var DeepSeekAssistant = {
     maxContextChars: "extensions.ai4zotero.maxContextChars",
     fontSize: "extensions.ai4zotero.fontSize",
     reasoningEffort: "extensions.ai4zotero.reasoningEffort",
-    languageStyle: "extensions.ai4zotero.languageStyle"
+    languageStyle: "extensions.ai4zotero.languageStyle",
+    history: "extensions.ai4zotero.history"
   },
   defaults: {
     endpoint: "https://api.deepseek.com/chat/completions",
@@ -111,6 +112,7 @@ var DeepSeekAssistant = {
     this.setDefaultCharPref(this.prefs.fontSize, this.defaults.fontSize);
     this.setDefaultCharPref(this.prefs.reasoningEffort, this.defaults.reasoningEffort);
     this.setDefaultCharPref(this.prefs.languageStyle, this.defaults.languageStyle);
+    this.setDefaultCharPref(this.prefs.history, "{}");
     this.setDefaultIntPref(this.prefs.maxContextChars, this.defaults.maxContextChars);
   },
 
@@ -574,8 +576,9 @@ var DeepSeekAssistant = {
       ]),
       h("div", { className: "zda-sessionbar" }, [
         button("＋ 新对话", { "data-action": "new-chat", className: "zda-session-button" }),
-        button("↺ 历史", { className: "zda-session-button", disabled: true, title: "历史记录会在后续版本开放" })
+        button("↺ 历史", { "data-action": "toggle-history", className: "zda-session-button", title: "查看按文章标题保存的历史对话" })
       ]),
+      h("div", { className: "zda-history", "data-role": "history", hidden: true }),
       h("div", { className: "zda-status", "data-role": "config-status" }),
       h("div", { className: "zda-settings", "data-role": "settings", hidden: true }, [
         h("div", { className: "zda-section-title", text: "DeepSeek API 设置" }),
@@ -674,6 +677,9 @@ var DeepSeekAssistant = {
     });
     html.querySelector('[data-action="new-chat"]').addEventListener("click", () => {
       this.resetChat(win, html);
+    });
+    html.querySelector('[data-action="toggle-history"]').addEventListener("click", () => {
+      this.toggleHistoryPanel(win, html);
     });
     html.querySelector('[data-field="fontSize"]').addEventListener("change", () => {
       try {
@@ -778,6 +784,18 @@ var DeepSeekAssistant = {
     if (!panel) {
       return;
     }
+    let key = panel.dataset.historyKey || "";
+    if (key) {
+      this.clearConversationHistory(key);
+    }
+    panel._ai4zoteroMessages = [];
+    panel._ai4zoteroAttachments = [];
+    this.renderAttachmentList(win, panel);
+    this.renderEmptyChat(win, panel);
+    panel.querySelector('[data-field="question"]').value = "";
+  },
+
+  renderEmptyChat(win, panel) {
     let chat = panel.querySelector('[data-role="chat"]');
     chat.replaceChildren();
     let doc = win.document;
@@ -810,7 +828,69 @@ var DeepSeekAssistant = {
       h("div", "zda-empty-tip", "试着问：“第三节方法背后的直觉是什么？”")
     );
     chat.append(empty);
-    panel.querySelector('[data-field="question"]').value = "";
+  },
+
+  async toggleHistoryPanel(win, panel = this.getPanel(win)) {
+    if (!panel) {
+      return;
+    }
+    let history = panel.querySelector('[data-role="history"]');
+    if (!history) {
+      return;
+    }
+    let open = history.hidden;
+    if (open) {
+      await this.renderHistoryPanel(win, panel);
+    }
+    history.hidden = !open;
+    panel.querySelector('[data-action="toggle-history"]')?.classList.toggle("zda-active", open);
+  },
+
+  async renderHistoryPanel(win, panel) {
+    let history = panel.querySelector('[data-role="history"]');
+    if (!history) {
+      return;
+    }
+    history.replaceChildren();
+    let doc = win.document;
+    let header = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    header.className = "zda-history-title";
+    header.textContent = "历史对话";
+    history.append(header);
+
+    let entries = Object.entries(this.readHistoryStore())
+      .map(([key, value]) => ({ key, ...value }))
+      .filter(entry => entry?.messages?.length)
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    if (!entries.length) {
+      let empty = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+      empty.className = "zda-history-empty";
+      empty.textContent = "还没有保存的文章对话。";
+      history.append(empty);
+      return;
+    }
+    for (let entry of entries.slice(0, 20)) {
+      let button = doc.createElementNS("http://www.w3.org/1999/xhtml", "button");
+      button.type = "button";
+      button.className = entry.key === panel.dataset.historyKey ? "zda-history-item zda-active" : "zda-history-item";
+      let title = doc.createElementNS("http://www.w3.org/1999/xhtml", "strong");
+      title.textContent = entry.title || "未命名文献";
+      let meta = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+      meta.textContent = `${entry.messages.length} 条消息`;
+      button.append(title, meta);
+      button.addEventListener("click", () => {
+        panel.dataset.historyKey = entry.key;
+        panel.dataset.historyTitle = entry.title || "";
+        let source = panel.querySelector('[data-role="source"]');
+        if (source) {
+          source.textContent = entry.title || "历史对话";
+        }
+        this.renderConversationRecords(win, panel, entry.messages || []);
+        history.hidden = true;
+        panel.querySelector('[data-action="toggle-history"]')?.classList.remove("zda-active");
+      });
+      history.append(button);
+    }
   },
 
   toggleSettings(panel, forceOpen = undefined) {
@@ -1106,7 +1186,7 @@ var DeepSeekAssistant = {
     }
     let key = await this.getCurrentContextKey(win);
     let source = panel.querySelector('[data-role="source"]');
-    if (!seedContext && !options.force && panel.dataset.contextKey === key && (panel._ai4zoteroContext || "").trim()) {
+    if (!seedContext && !options.force && panel.dataset.contextKey === key && panel.dataset.historyKey && (panel._ai4zoteroContext || "").trim()) {
       return;
     }
     if (source) {
@@ -1125,6 +1205,15 @@ var DeepSeekAssistant = {
     let title = await this.getDisplayTitle(item);
     if (source) {
       source.textContent = title || "未检测到当前阅读器";
+    }
+    let identity = await this.getCurrentPaperIdentity(win, item, title);
+    if (identity?.key && panel.dataset.historyKey !== identity.key) {
+      this.loadConversationForPaper(win, panel, identity);
+    } else if (identity?.key) {
+      panel.dataset.historyTitle = identity.title || panel.dataset.historyTitle || "";
+    } else {
+      delete panel.dataset.historyKey;
+      delete panel.dataset.historyTitle;
     }
   },
 
@@ -1288,6 +1377,148 @@ var DeepSeekAssistant = {
     } catch (e) {
       return "";
     }
+  },
+
+  async getCurrentPaperIdentity(win, item = null, title = "") {
+    let reader = this.getActiveReader(win);
+    let current = item || (reader?.itemID ? Zotero.Items.get(reader.itemID) : this.getSelectedAttachment(win));
+    if (!current) {
+      return null;
+    }
+    try {
+      let parent = current.parentItemID ? Zotero.Items.get(current.parentItemID) : null;
+      let base = parent || current;
+      let key = [base?.libraryID || current.libraryID || "library", base?.key || base?.id || current.id].join(":");
+      if (!key) {
+        return null;
+      }
+      return {
+        key: `item:${key}`,
+        title: title || await this.getDisplayTitle(current) || "未命名文献"
+      };
+    } catch (e) {
+      return null;
+    }
+  },
+
+  loadConversationForPaper(win, panel, identity) {
+    panel.dataset.historyKey = identity.key;
+    panel.dataset.historyTitle = identity.title || "";
+    let entry = this.getConversationHistory(identity.key);
+    if (entry?.messages?.length) {
+      this.renderConversationRecords(win, panel, entry.messages);
+    } else {
+      panel._ai4zoteroMessages = [];
+      this.renderEmptyChat(win, panel);
+    }
+  },
+
+  renderConversationRecords(win, panel, records = []) {
+    let chat = panel.querySelector('[data-role="chat"]');
+    if (!chat) {
+      return;
+    }
+    chat.replaceChildren();
+    panel._ai4zoteroMessages = [];
+    for (let record of records) {
+      if (!record?.role || typeof record.text !== "string") {
+        continue;
+      }
+      this.addMessage(win, record.role, record.text, panel, {
+        skipHistory: true,
+        attachments: record.attachments || []
+      });
+      panel._ai4zoteroMessages.push(this.normalizeConversationRecord(record));
+    }
+    if (!panel._ai4zoteroMessages.length) {
+      this.renderEmptyChat(win, panel);
+    } else {
+      chat.scrollTop = chat.scrollHeight;
+    }
+  },
+
+  getConversationHistory(key) {
+    return this.readHistoryStore()[key] || null;
+  },
+
+  clearConversationHistory(key) {
+    let store = this.readHistoryStore();
+    if (store[key]) {
+      delete store[key];
+      this.writeHistoryStore(store);
+    }
+  },
+
+  readHistoryStore() {
+    try {
+      let raw = this.getCharPref(this.prefs.history, "{}");
+      let parsed = JSON.parse(raw || "{}");
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch (e) {
+      Zotero.debug(`AI4Zotero: failed reading history: ${e}`);
+      return {};
+    }
+  },
+
+  writeHistoryStore(store) {
+    try {
+      let entries = Object.entries(store || {})
+        .sort((a, b) => (b[1]?.updatedAt || 0) - (a[1]?.updatedAt || 0))
+        .slice(0, 30);
+      let compact = Object.fromEntries(entries);
+      let json = JSON.stringify(compact);
+      while (json.length > 900000 && entries.length > 1) {
+        entries.pop();
+        json = JSON.stringify(Object.fromEntries(entries));
+      }
+      this.setCharPref(this.prefs.history, json);
+    } catch (e) {
+      Zotero.debug(`AI4Zotero: failed writing history: ${e}`);
+    }
+  },
+
+  saveConversationHistory(panel) {
+    let key = panel?.dataset?.historyKey;
+    if (!key) {
+      return;
+    }
+    let messages = (panel._ai4zoteroMessages || [])
+      .map(record => this.normalizeConversationRecord(record))
+      .filter(Boolean)
+      .slice(-40);
+    let store = this.readHistoryStore();
+    if (!messages.length) {
+      delete store[key];
+    } else {
+      store[key] = {
+        title: panel.dataset.historyTitle || "未命名文献",
+        updatedAt: Date.now(),
+        messages
+      };
+    }
+    this.writeHistoryStore(store);
+  },
+
+  normalizeConversationRecord(record) {
+    if (!record || !["user", "assistant"].includes(record.role)) {
+      return null;
+    }
+    let limit = record.role === "assistant" ? 16000 : 5000;
+    return {
+      role: record.role,
+      text: String(record.text || "").slice(0, limit),
+      ts: record.ts || Date.now(),
+      attachments: this.sanitizeHistoryAttachments(record.attachments || [])
+    };
+  },
+
+  sanitizeHistoryAttachments(attachments = []) {
+    return attachments.slice(0, 8).map(attachment => ({
+      kind: attachment.kind || "file",
+      name: attachment.name || "附件",
+      type: attachment.type || "",
+      size: attachment.size || 0
+    }));
   },
 
   async ask(win, panel = this.getPanel(win)) {
@@ -1610,6 +1841,8 @@ var DeepSeekAssistant = {
     chat.querySelector('[data-role="empty"]')?.remove();
     let message = win.document.createElementNS("http://www.w3.org/1999/xhtml", "div");
     message.className = `zda-message zda-${role}`;
+    message._ai4zoteroPanel = panel;
+    message._ai4zoteroSkipHistory = Boolean(options.skipHistory);
     this.setMessageContent(win, message, text, role, options);
     chat.appendChild(message);
     chat.scrollTop = chat.scrollHeight;
@@ -1641,6 +1874,33 @@ var DeepSeekAssistant = {
       message.classList.remove("zda-markdown");
       message.textContent = text;
     }
+    this.persistRenderedMessage(message, role, text, options);
+  },
+
+  persistRenderedMessage(message, role, text, options = {}) {
+    if (options.skipHistory || message._ai4zoteroSkipHistory || options.pending || !["user", "assistant"].includes(role)) {
+      return;
+    }
+    if (message._ai4zoteroHistorySaved) {
+      return;
+    }
+    let panel = message._ai4zoteroPanel;
+    if (!panel?.dataset?.historyKey) {
+      return;
+    }
+    let record = this.normalizeConversationRecord({
+      role,
+      text,
+      ts: Date.now(),
+      attachments: options.attachments || []
+    });
+    if (!record) {
+      return;
+    }
+    panel._ai4zoteroMessages = panel._ai4zoteroMessages || [];
+    panel._ai4zoteroMessages.push(record);
+    message._ai4zoteroHistorySaved = true;
+    this.saveConversationHistory(panel);
   },
 
   appendThinkingBar(win, message, options = {}) {
