@@ -569,18 +569,18 @@ var DeepSeekAssistant = {
         ])
       ]),
       h("div", { className: "zda-tabs", role: "tablist" }, [
-        button("Assistant", { className: "zda-tab zda-tab-active", role: "tab", "aria-selected": "true" }),
-        button("My Notes", { className: "zda-tab", role: "tab", disabled: true, title: "后续版本开放" }),
-        button("Comments", { className: "zda-tab", role: "tab", disabled: true, title: "后续版本开放" }),
-        button("Similar", { className: "zda-tab", role: "tab", disabled: true, title: "后续版本开放" })
+        button("Assistant", { className: "zda-tab zda-tab-active", role: "tab", "aria-selected": "true", "data-tab": "assistant" }),
+        button("My Notes", { className: "zda-tab", role: "tab", "aria-selected": "false", "data-tab": "notes" }),
+        button("Comments", { className: "zda-tab", role: "tab", "aria-selected": "false", "data-tab": "comments" }),
+        button("Similar", { className: "zda-tab", role: "tab", "aria-selected": "false", "data-tab": "similar" })
       ]),
-      h("div", { className: "zda-sessionbar" }, [
+      h("div", { className: "zda-sessionbar", "data-tab-target": "assistant" }, [
         button("＋ 新对话", { "data-action": "new-chat", className: "zda-session-button" }),
         button("↺ 历史", { "data-action": "toggle-history", className: "zda-session-button", title: "查看按文章标题保存的历史对话" })
       ]),
-      h("div", { className: "zda-history", "data-role": "history", hidden: true }),
-      h("div", { className: "zda-status", "data-role": "config-status" }),
-      h("div", { className: "zda-settings", "data-role": "settings", hidden: true }, [
+      h("div", { className: "zda-history", "data-role": "history", "data-tab-target": "assistant", hidden: true }),
+      h("div", { className: "zda-status", "data-role": "config-status", "data-tab-target": "assistant" }),
+      h("div", { className: "zda-settings", "data-role": "settings", "data-tab-target": "assistant", hidden: true }, [
         h("div", { className: "zda-section-title", text: "DeepSeek API 设置" }),
         label("API Key", input("apiKey", { type: "password", placeholder: "sk-...", autocomplete: "off" })),
         label("接口地址", input("endpoint", { type: "url" })),
@@ -606,17 +606,17 @@ var DeepSeekAssistant = {
           button("测试连接", { "data-action": "test-api" })
         ])
       ]),
-      h("div", { className: "zda-prompt-strip" }, [
+      h("div", { className: "zda-prompt-strip", "data-tab-target": "assistant" }, [
         button("论文速览", { "data-prompt": "summarize" }),
         button("研究问题", { "data-prompt": "problem" }),
         button("方法拆解", { "data-prompt": "methods" }),
         button("实验结果", { "data-prompt": "results" }),
         button("解释划线", { "data-prompt": "selection" })
       ]),
-      h("div", { className: "zda-chat", "data-role": "chat" }, [
+      h("div", { className: "zda-chat", "data-role": "chat", "data-tab-target": "assistant" }, [
         emptyState()
       ]),
-      h("form", { className: "zda-composer", "data-role": "composer" }, [
+      h("form", { className: "zda-composer", "data-role": "composer", "data-tab-target": "assistant" }, [
         h("textarea", {
           "data-field": "question",
           placeholder: "询问这篇论文，或粘贴图片/文件后提问...",
@@ -654,7 +654,10 @@ var DeepSeekAssistant = {
             "aria-label": "发送问题"
           })
         ])
-      ])
+      ]),
+      h("div", { className: "zda-local-pane", "data-role": "notes-pane", "data-tab-target": "notes", hidden: true }),
+      h("div", { className: "zda-local-pane", "data-role": "comments-pane", "data-tab-target": "comments", hidden: true }),
+      h("div", { className: "zda-local-pane", "data-role": "similar-pane", "data-tab-target": "similar", hidden: true })
     ]);
 
     html.querySelector('[data-action="close"]').addEventListener("click", event => {
@@ -663,6 +666,7 @@ var DeepSeekAssistant = {
       this.closePanel(win, html);
     });
     html.querySelector('[data-action="toggle-settings"]').addEventListener("click", () => {
+      this.applyTab(win, html, "assistant");
       this.toggleSettings(html);
     });
     html.querySelector('[data-action="save-settings"]').addEventListener("click", () => {
@@ -676,9 +680,11 @@ var DeepSeekAssistant = {
       this.testConnection(win, html).catch(e => this.reportError(win, e, html));
     });
     html.querySelector('[data-action="new-chat"]').addEventListener("click", () => {
+      this.applyTab(win, html, "assistant");
       this.resetChat(win, html);
     });
     html.querySelector('[data-action="toggle-history"]').addEventListener("click", () => {
+      this.applyTab(win, html, "assistant");
       this.toggleHistoryPanel(win, html);
     });
     html.querySelector('[data-field="fontSize"]').addEventListener("change", () => {
@@ -732,12 +738,19 @@ var DeepSeekAssistant = {
     });
     for (let quickButton of html.querySelectorAll("[data-prompt]")) {
       quickButton.addEventListener("click", event => {
+        this.applyTab(win, html, "assistant");
         this.applyQuickPrompt(win, event.currentTarget.dataset.prompt, html);
+      });
+    }
+    for (let tab of html.querySelectorAll("[data-tab]")) {
+      tab.addEventListener("click", event => {
+        this.applyTab(win, html, event.currentTarget.dataset.tab || "assistant");
       });
     }
 
     this.populateSettings(html);
     this.applyFontSize(html);
+    this.applyTab(win, html, "assistant");
     this.updateConfigStatus(html);
     this.queueAutoContextRefresh(win, html, 300);
     if (embedded || docked || standaloneReader) {
@@ -778,6 +791,93 @@ var DeepSeekAssistant = {
     }
     panel.classList.remove("zda-font-small", "zda-font-medium", "zda-font-large");
     panel.classList.add(`zda-font-${size}`);
+  },
+
+  applyTab(win, panel, tab = "assistant") {
+    let active = ["assistant", "notes", "comments", "similar"].includes(tab) ? tab : "assistant";
+    panel.dataset.activeTab = active;
+    for (let button of panel.querySelectorAll("[data-tab]")) {
+      let selected = button.dataset.tab === active;
+      button.classList.toggle("zda-tab-active", selected);
+      button.setAttribute("aria-selected", selected ? "true" : "false");
+    }
+    for (let elem of panel.querySelectorAll("[data-tab-target]")) {
+      let targetMatches = elem.dataset.tabTarget === active;
+      if (!targetMatches) {
+        elem.hidden = true;
+      } else if (!["settings", "history"].includes(elem.dataset.role || "")) {
+        elem.hidden = false;
+      }
+    }
+    if (active !== "assistant") {
+      panel.querySelector('[data-role="settings"]')?.setAttribute("hidden", "true");
+      panel.querySelector('[data-role="history"]')?.setAttribute("hidden", "true");
+      panel.querySelector('[data-action="toggle-settings"]')?.classList.remove("zda-active");
+      panel.querySelector('[data-action="toggle-history"]')?.classList.remove("zda-active");
+      this.populateLocalTab(win, panel, active).catch(e => this.reportError(win, e, panel));
+    } else {
+      this.updateConfigStatus(panel);
+    }
+  },
+
+  async populateLocalTab(win, panel, tab) {
+    let role = `${tab}-pane`;
+    let pane = panel.querySelector(`[data-role="${role}"]`);
+    if (!pane) {
+      return;
+    }
+    pane.replaceChildren();
+    if (tab === "notes") {
+      this.renderLocalPane(win, pane, "My Notes", await this.getPaperNotes(win), "当前文献还没有 Zotero 子笔记。");
+    } else if (tab === "comments") {
+      this.renderLocalPane(win, pane, "Comments", await this.getPaperComments(win), "当前文献还没有批注或批注评论。");
+    } else if (tab === "similar") {
+      this.renderLocalPane(win, pane, "Similar", await this.getSimilarPapers(win), "没有找到足够相似的本地文献。");
+    }
+  },
+
+  renderLocalPane(win, pane, title, items, emptyText) {
+    let doc = win.document;
+    let header = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+    header.className = "zda-local-header";
+    let h = doc.createElementNS("http://www.w3.org/1999/xhtml", "strong");
+    h.textContent = title;
+    let count = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+    count.textContent = `${items.length} 项`;
+    header.append(h, count);
+    pane.append(header);
+    if (!items.length) {
+      let empty = doc.createElementNS("http://www.w3.org/1999/xhtml", "div");
+      empty.className = "zda-local-empty";
+      empty.textContent = emptyText;
+      pane.append(empty);
+      return;
+    }
+    for (let item of items) {
+      let card = doc.createElementNS("http://www.w3.org/1999/xhtml", "article");
+      card.className = "zda-local-card";
+      let itemTitle = doc.createElementNS("http://www.w3.org/1999/xhtml", "strong");
+      itemTitle.textContent = item.title || "未命名";
+      let body = doc.createElementNS("http://www.w3.org/1999/xhtml", "p");
+      body.textContent = item.text || "";
+      card.append(itemTitle, body);
+      if (item.meta) {
+        let meta = doc.createElementNS("http://www.w3.org/1999/xhtml", "span");
+        meta.className = "zda-local-meta";
+        meta.textContent = item.meta;
+        card.append(meta);
+      }
+      if (item.itemID) {
+        card.addEventListener("click", () => {
+          try {
+            win.ZoteroPane?.selectItem?.(item.itemID);
+          } catch (e) {
+            Zotero.debug(`AI4Zotero: failed selecting related item: ${e}`);
+          }
+        });
+      }
+      pane.append(card);
+    }
   },
 
   resetChat(win, panel = this.getPanel(win)) {
@@ -1215,6 +1315,9 @@ var DeepSeekAssistant = {
       delete panel.dataset.historyKey;
       delete panel.dataset.historyTitle;
     }
+    if (panel.dataset.activeTab && panel.dataset.activeTab !== "assistant") {
+      this.populateLocalTab(win, panel, panel.dataset.activeTab).catch(e => this.reportError(win, e, panel));
+    }
   },
 
   queueAutoContextRefresh(win, panel = this.getPanel(win), delay = 700) {
@@ -1377,6 +1480,148 @@ var DeepSeekAssistant = {
     } catch (e) {
       return "";
     }
+  },
+
+  getCurrentPaperItems(win) {
+    let reader = this.getActiveReader(win);
+    let current = reader?.itemID ? Zotero.Items.get(reader.itemID) : this.getSelectedAttachment(win);
+    if (!current) {
+      return { current: null, base: null, attachments: [] };
+    }
+    let base = current.parentItemID ? Zotero.Items.get(current.parentItemID) : current;
+    let attachments = [];
+    try {
+      if (current.isAttachment?.()) {
+        attachments.push(current);
+      }
+      let attachmentIDs = base?.getAttachments?.() || [];
+      for (let id of attachmentIDs) {
+        let attachment = Zotero.Items.get(id);
+        if (attachment && !attachments.some(item => item.id === attachment.id)) {
+          attachments.push(attachment);
+        }
+      }
+    } catch (e) {
+      // Attachments are optional for local tabs.
+    }
+    return { current, base, attachments };
+  },
+
+  async getPaperNotes(win) {
+    let { base } = this.getCurrentPaperItems(win);
+    if (!base) {
+      return [];
+    }
+    try {
+      let noteIDs = base.getNotes?.() || [];
+      return noteIDs
+        .map(id => Zotero.Items.get(id))
+        .filter(Boolean)
+        .slice(-20)
+        .map(note => {
+          let raw = note.getNote?.() || note.getField?.("note") || "";
+          let text = this.stripHTML(raw).slice(0, 800);
+          return {
+            title: note.getField?.("title") || "Zotero 笔记",
+            text: text || "空笔记",
+            meta: "子笔记",
+            itemID: note.id
+          };
+        });
+    } catch (e) {
+      Zotero.debug(`AI4Zotero: failed reading notes: ${e}`);
+      return [];
+    }
+  },
+
+  async getPaperComments(win) {
+    let { attachments } = this.getCurrentPaperItems(win);
+    let comments = [];
+    for (let attachment of attachments) {
+      try {
+        let annotations = attachment.getAnnotations?.() || [];
+        for (let annotation of annotations.slice(-40)) {
+          let text = annotation.annotationText || annotation.getField?.("annotationText") || "";
+          let comment = annotation.annotationComment || annotation.getField?.("annotationComment") || "";
+          if (!text && !comment) {
+            continue;
+          }
+          let page = annotation.annotationPageLabel || annotation.annotationPage || "";
+          comments.push({
+            title: comment ? "批注评论" : "划线批注",
+            text: [text, comment && `评论：${comment}`].filter(Boolean).join("\n"),
+            meta: page ? `第 ${page} 页` : "批注"
+          });
+        }
+      } catch (e) {
+        Zotero.debug(`AI4Zotero: failed reading comments: ${e}`);
+      }
+    }
+    return comments.slice(-30).reverse();
+  },
+
+  async getSimilarPapers(win) {
+    let { base } = this.getCurrentPaperItems(win);
+    if (!base) {
+      return [];
+    }
+    try {
+      let baseTitle = base.getField?.("title") || "";
+      let baseTokens = new Set(this.tokenizeTitle(baseTitle));
+      let baseTags = new Set((base.getTags?.() || []).map(tag => String(tag.tag || tag).toLowerCase()));
+      let baseCreators = new Set((base.getCreatorsJSON?.() || [])
+        .map(creator => String(creator.lastName || creator.name || "").toLowerCase())
+        .filter(Boolean));
+      let candidates = Zotero.Items.getAll?.(base.libraryID) || [];
+      return candidates
+        .filter(item => item?.id !== base.id && !item.isAttachment?.() && !item.isNote?.())
+        .map(item => {
+          let title = item.getField?.("title") || "";
+          let tokens = new Set(this.tokenizeTitle(title));
+          let tags = new Set((item.getTags?.() || []).map(tag => String(tag.tag || tag).toLowerCase()));
+          let creators = new Set((item.getCreatorsJSON?.() || [])
+            .map(creator => String(creator.lastName || creator.name || "").toLowerCase())
+            .filter(Boolean));
+          let titleOverlap = [...tokens].filter(token => baseTokens.has(token)).length;
+          let tagOverlap = [...tags].filter(tag => baseTags.has(tag)).length;
+          let creatorOverlap = [...creators].filter(name => baseCreators.has(name)).length;
+          let score = titleOverlap + tagOverlap * 2 + creatorOverlap;
+          return { item, title, score, tagOverlap, titleOverlap };
+        })
+        .filter(entry => entry.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8)
+        .map(entry => ({
+          title: entry.title || "未命名文献",
+          text: entry.item.getField?.("abstractNote")?.slice(0, 360) || "本地库中标题、标签或作者与当前文献相近。",
+          meta: `相似度 ${entry.score}`,
+          itemID: entry.item.id
+        }));
+    } catch (e) {
+      Zotero.debug(`AI4Zotero: failed finding similar papers: ${e}`);
+      return [];
+    }
+  },
+
+  tokenizeTitle(text) {
+    return String(text || "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s-]/gu, " ")
+      .split(/\s+/)
+      .filter(token => token.length > 2 && !["the", "and", "for", "with", "from", "into", "using", "based"].includes(token));
+  },
+
+  stripHTML(html) {
+    return String(html || "")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ")
+      .trim();
   },
 
   async getCurrentPaperIdentity(win, item = null, title = "") {
